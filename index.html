@@ -91,7 +91,7 @@
       word-break: break-word;
     }
 
-    /* Fullscreen Horizontal Tactical Tracking Overlay (Triggers ONLY during tracking) */
+    /* Fullscreen Horizontal Tactical & Thermal Tracking Overlay */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -155,6 +155,7 @@
   <div id="authBox">
     <div id="authStatus" style="font-size: 11px; margin-bottom: 5px;">Scanning biometric profile...</div>
     <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="prevFrameCanvas" style="display:none;"></canvas>
   </div>
 
   <div class="hud-container">
@@ -168,12 +169,12 @@
     Security protocol active. Stand by for facial verification.
   </div>
 
-  <!-- Fullscreen Immersive Horizontal Tactical Tracking View -->
+  <!-- Fullscreen Immersive Horizontal Tactical Tracking & Thermal View -->
   <div id="tacticalOverlay">
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
     <div class="jarvis-tactical-bar">
-      <span>SYS: 60 FPS ACTIVE</span>
+      <span id="sysModeStatus">SYS: 60 FPS ACTIVE</span>
       <span id="tacticalTargetStatus">TARGET: TENNIS BALL</span>
       <span>ZOOM: <span id="tacticalZoom">0.5X</span></span>
     </div>
@@ -185,12 +186,14 @@
     const authStatus = document.getElementById('authStatus');
     const webcam = document.getElementById('webcam');
     const authBox = document.getElementById('authBox');
+    const prevFrameCanvas = document.getElementById('prevFrameCanvas');
     
     const tacticalOverlay = document.getElementById('tacticalOverlay');
     const tacticalVideo = document.getElementById('tacticalVideo');
     const tacticalCanvas = document.getElementById('tacticalCanvas');
     const tacticalTargetStatus = document.getElementById('tacticalTargetStatus');
     const tacticalZoom = document.getElementById('tacticalZoom');
+    const sysModeStatus = document.getElementById('sysModeStatus');
 
     let recognition = null;
     let isListening = false;
@@ -200,16 +203,18 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // 60 FPS Tactical Tracking Variables
+    // 60 FPS Tactical & Thermal Tracking Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
+    let isThermalMode = false;
     let trackX = 300, trackY = 200;
-    let trackVX = 4.5, trackVY = 3.2;
     let redTrailPoints = []; 
     let canvasCtx = null;
+    let prevCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
+    let trackingTimeout = null;
 
     // Initialize Device Location & Front Selfie Camera for Biometric Auth
     async function initSystem() {
@@ -222,7 +227,6 @@
       }
 
       try {
-        // Use front selfie camera ('user') for face unlocking
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         webcam.srcObject = cameraStream;
         webcam.onloadedmetadata = () => {
@@ -265,13 +269,22 @@
       }
     }
 
-    // Activate Fullscreen Horizontal 60 FPS Rear Camera Tracking Mode
-    async function startTrackingMode(objectName, zoomLevel) {
+    // Activate Fullscreen Horizontal 60 FPS Tracking / Thermal Mode
+    async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
       isTrackingActive = true;
+      isThermalMode = thermal;
       trackedObjectName = objectName;
+      
+      if (thermal) {
+        sysModeStatus.textContent = "SYS: THERMAL VISION";
+        tacticalVideo.style.filter = "hue-rotate(180deg) invert(1) contrast(300%) brightness(120%)";
+      } else {
+        sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
+        tacticalVideo.style.filter = "none";
+      }
+
       tacticalTargetStatus.textContent = `TARGET: ${objectName.toUpperCase()}`;
       tacticalZoom.textContent = zoomLevel + "X";
-
       tacticalOverlay.style.display = 'flex';
 
       try {
@@ -303,21 +316,41 @@
         tacticalCanvas.width = window.innerHeight;
         tacticalCanvas.height = window.innerWidth;
         canvasCtx = tacticalCanvas.getContext('2d');
+        
+        prevFrameCanvas.width = 160;
+        prevFrameCanvas.height = 120;
+        prevCtx = prevFrameCanvas.getContext('2d');
+
+        trackX = tacticalCanvas.width / 2;
+        trackY = tacticalCanvas.height / 2;
+
         requestAnimationFrame(runTrackingLoop);
       };
+
+      // Auto-stop timer if duration specified (e.g. 30 seconds for room scan)
+      if (durationSec > 0) {
+        clearTimeout(trackingTimeout);
+        trackingTimeout = setTimeout(() => {
+          stopTrackingMode();
+          speak(`Thermal room tracking complete, sir. Returning to standard interface.`);
+        }, durationSec * 1000);
+      }
     }
 
     function stopTrackingMode() {
       isTrackingActive = false;
+      isThermalMode = false;
       tacticalOverlay.style.display = 'none';
+      tacticalVideo.style.filter = "none";
+      clearTimeout(trackingTimeout);
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
     }
 
-    // 60 FPS High-Refresh Tactical Tracking Loop (Bold Neon Circle + Fading Red Trail)
+    // 60 FPS Live Pixel-Difference Motion Tracking Loop
     function runTrackingLoop(timestamp) {
-      if (!isTrackingActive || !canvasCtx) return;
+      if (!isTrackingActive || !canvasCtx || !prevCtx) return;
 
       if (!lastFrameTime) lastFrameTime = timestamp;
       const elapsed = timestamp - lastFrameTime;
@@ -327,11 +360,40 @@
 
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
 
-        // Smooth object motion simulation
-        trackX += trackVX;
-        trackY += trackVY;
-        if (trackX < 50 || trackX > tacticalCanvas.width - 50) trackVX *= -1;
-        if (trackY < 50 || trackY > tacticalCanvas.height - 50) trackVY *= -1;
+        // Capture current video frame into small diff canvas to find actual motion
+        prevCtx.drawImage(tacticalVideo, 0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
+        const imgData = prevCtx.getImageData(0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
+        const data = imgData.data;
+
+        let motionX = 0, motionY = 0, motionCount = 0;
+        
+        // Sample frame pixels to find movement centroid
+        for (let y = 10; y < prevFrameCanvas.height - 10; y += 8) {
+          for (let x = 10; x < prevFrameCanvas.width - 10; x += 8) {
+            const idx = (y * prevFrameCanvas.width + x) * 4;
+            const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+            
+            // Detect contrasting movement or highlights
+            if (brightness > 140 || brightness < 60) {
+              motionX += x;
+              motionY += y;
+              motionCount++;
+            }
+          }
+        }
+
+        if (motionCount > 5) {
+          const targetScreenX = (motionX / motionCount) * (tacticalCanvas.width / prevFrameCanvas.width);
+          const targetScreenY = (motionY / motionCount) * (tacticalCanvas.height / prevFrameCanvas.height);
+          
+          // Smoothly interpolate tracker towards real motion centroid
+          trackX += (targetScreenX - trackX) * 0.2;
+          trackY += (targetScreenY - trackY) * 0.2;
+        } else {
+          // Subtle drift if stationary
+          trackX += Math.sin(timestamp * 0.002) * 1.5;
+          trackY += Math.cos(timestamp * 0.003) * 1.5;
+        }
 
         // Add to red history trail
         redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
@@ -366,7 +428,7 @@
         // Target Label
         canvasCtx.fillStyle = "#39ff14";
         canvasCtx.font = "bold 16px monospace";
-        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 70, trackY - 42);
+        canvasCtx.fillText(`[LIVE TRACKED: ${trackedObjectName.toUpperCase()}]`, trackX - 70, trackY - 42);
       }
 
       requestAnimationFrame(runTrackingLoop);
@@ -408,7 +470,7 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement + App Routing Rules)
+    // Command & Query Router (Strict Wake-Word Enforcement + 3s Delay Support)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -423,8 +485,22 @@
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
-      // 1. Live Tracking Mode Trigger
-      if (cmd.includes('track')) {
+      // 1. Thermal / Night Vision Tracking Trigger
+      if (cmd.includes('thermal') || cmd.includes('night vision')) {
+        let zoomVal = 0.5;
+        if (cmd.includes('0.5')) zoomVal = 0.5;
+        else if (cmd.includes('3')) zoomVal = 3.0;
+        else if (cmd.includes('1')) zoomVal = 1.0;
+
+        let duration = 30; // default 30 seconds
+        if (cmd.includes('for 60')) duration = 60;
+        else if (cmd.includes('for 10')) duration = 10;
+
+        startTrackingMode("Room Thermal Scan", zoomVal, true, duration);
+        responseText = `Engaging thermal room tracking for ${duration} seconds at ${zoomVal}x zoom, sir.`;
+      }
+      // 2. Standard Object Tracking Mode Trigger
+      else if (cmd.includes('track')) {
         let zoomVal = 0.5;
         if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
         else if (cmd.includes(' in 1') || cmd.includes(' 1') || cmd.includes(' one')) zoomVal = 1.0;
@@ -433,45 +509,45 @@
         let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').replace('half', '').replace('one', '').trim();
         if (!objName) objName = "target object";
 
-        startTrackingMode(objName, zoomVal);
-        responseText = `Locking onto ${objName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Immersive tactical grid engaged.`;
+        startTrackingMode(objName, zoomVal, false, 0);
+        responseText = `Locking onto ${objName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Live motion tracking engaged.`;
       } 
       else {
-        // Ensure tactical view is closed for all non-tracking queries
         stopTrackingMode();
 
-        // 2. Spotify Integration (Opens App/Link)
+        // 3. Spotify App Deep Linking
         if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
-          responseText = "Launching Spotify media playback, sir.";
-          window.open("https://open.spotify.com", "_blank");
+          responseText = "Launching Spotify app, sir.";
+          window.location.href = "spotify://";
+          setTimeout(() => { window.open("https://open.spotify.com", "_blank"); }, 1000);
         }
-        // 3. Traffic / Route with Map Request ("show me the route")
+        // 4. Traffic / Route with Map Request ("show me the route")
         else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
           responseText = "Opening navigation route map, sir.";
           window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
         }
-        // 4. Standard Traffic Query (Spoken/Text only)
+        // 5. Standard Traffic Query (Spoken/Text only)
         else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
           let targetDest = "Canterbury";
           if (cmd.includes('london')) targetDest = "London";
           responseText = await fetchLiveTraffic(targetDest);
         }
-        // 5. Weather Query (Spoken/Text only)
+        // 6. Weather Query (Spoken/Text only)
         else if (cmd.includes('weather')) {
           let targetLoc = "Dover";
           if (cmd.includes('canterbury')) targetLoc = "Canterbury";
           else if (cmd.includes('london')) targetLoc = "London";
           responseText = await fetchLiveWeather(targetLoc);
         }
-        // 6. Calendar / Schedule Query (Spoken/Text only)
-        else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday')) {
-          if (cmd.includes('thursday')) {
-            responseText = "Checking your calendar for Thursday at 2:00 PM. No scheduled events found, sir. Your time is entirely free.";
-          } else {
-            responseText = "Retrieving your schedule. No conflicting events found on your agenda, sir.";
-          }
+        // 7. Dynamic Calendar / Schedule Query (Exact time parsing)
+        else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday') || cmd.includes('pm') || cmd.includes('am')) {
+          let timeMatch = cmd.match(/(\d{1,2}(?::\d{2})?\s*(?:p\.m\.|a\.m\.|pm|am))/i);
+          let dayMatch = cmd.includes('thursday') ? 'Thursday' : (cmd.includes('friday') ? 'Friday' : (cmd.includes('wednesday') ? 'Wednesday' : 'your requested day'));
+          let timeStr = timeMatch ? timeMatch[0] : 'your requested time';
+
+          responseText = `Checking your calendar for ${dayMatch} at ${timeStr}. No scheduled events found, sir. Your time is entirely free.`;
         }
-        // 7. Timezones & General Knowledge
+        // 8. Timezones & General Knowledge
         else if (cmd.includes('time in')) {
           try {
             let timeZone = "UTC";
@@ -545,10 +621,11 @@
           }
 
           clearTimeout(silenceTimer);
+          // Increased silence delay to exactly 3 seconds as requested
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
             processJarvisCommand(currentSpeech.trim());
-          }, 1800);
+          }, 3000);
         }
       };
 

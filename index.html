@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>J.A.R.V.I.S. HUD - Tactical Tracking</title>
+  <title>J.A.R.V.I.S. HUD - 60 FPS Tactical Tracking</title>
   <style>
     body {
       background-color: #000;
@@ -49,7 +49,7 @@
     #authBox {
       position: relative;
       margin: 5px auto;
-      max-width: 300px;
+      max-width: 320px;
       border: 1px solid #00ffcc;
       padding: 5px;
       border-radius: 8px;
@@ -58,7 +58,7 @@
     }
     #webcam {
       width: 100%;
-      max-height: 120px;
+      max-height: 140px;
       object-fit: cover;
       border-radius: 4px;
       border: 1px solid #00ffcc;
@@ -100,7 +100,6 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
-    /* Jarvis Bottom HUD Bar */
     .jarvis-bottom-bar {
       position: fixed;
       bottom: 0;
@@ -144,7 +143,7 @@
 
   <!-- Jarvis Bottom Control Bar -->
   <div class="jarvis-bottom-bar">
-    <span>SYS: ONLINE</span>
+    <span>SYS: 60 FPS</span>
     <span id="targetStatus">TARGET: NONE</span>
     <span>ZOOM: <span id="currentZoom">0.5X</span></span>
   </div>
@@ -167,15 +166,18 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // Object Tracking State Variables
+    // 60 FPS Object Tracking State Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackX = 150, trackY = 100;
-    let trackVX = 2, trackVY = 1.5;
-    let redTrailPoints = []; // Stores past positions for 3-second fading red line
+    let trackX = 160, trackY = 90;
+    let trackVX = 3.0, trackVY = 2.2;
+    let redTrailPoints = []; 
     let canvasCtx = null;
+    let lastFrameTime = 0;
+    const targetFPS = 60;
+    const frameInterval = 1000 / targetFPS;
 
-    // Initialize Device Location & 0.5x Wide-Angle Camera Feed
+    // Initialize Device Location & Rear Main Camera Feed
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -188,21 +190,16 @@
       try {
         const constraints = {
           video: {
-            facingMode: 'user',
+            facingMode: { ideal: 'environment' },
             width: { ideal: 1280 },
-            height: { ideal: 720 }
+            height: { ideal: 720 },
+            frameRate: { ideal: 60, max: 60 }
           }
         };
 
         cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        
-        const track = cameraStream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities();
-        if (capabilities.zoom) {
-          try { await track.applyConstraints({ advanced: [{ zoom: 0.5 }] }); } catch(e) {}
-        }
-
         webcam.srcObject = cameraStream;
+        
         webcam.onloadedmetadata = () => {
           trackingCanvas.width = webcam.videoWidth || 320;
           trackingCanvas.height = webcam.videoHeight || 180;
@@ -210,12 +207,22 @@
           setTimeout(verifyUserFace, 1500);
         };
       } catch (err) {
-        authStatus.textContent = "Camera access required for security unlock.";
-        statusTerminal.textContent = "Error: Camera access blocked or unavailable.";
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { frameRate: { ideal: 60 } } });
+          webcam.srcObject = cameraStream;
+          webcam.onloadedmetadata = () => {
+            trackingCanvas.width = webcam.videoWidth || 320;
+            trackingCanvas.height = webcam.videoHeight || 180;
+            canvasCtx = trackingCanvas.getContext('2d');
+            setTimeout(verifyUserFace, 1500);
+          };
+        } catch(e) {
+          authStatus.textContent = "Camera access required.";
+          statusTerminal.textContent = "Error: Camera access blocked.";
+        }
       }
     }
 
-    // Biometric Confirmation & Privacy Auto-Hide
     function verifyUserFace() {
       if (isAuthorized) return;
 
@@ -223,7 +230,6 @@
       authStatus.textContent = "Biometric Confirmed: Welcome back, Sir.";
       
       speak("Biometrics confirmed. Welcome back, sir.", () => {
-        // Hide camera box into privacy mode after confirmation
         authBox.style.display = 'none';
         if (cameraStream && !isTrackingActive) {
           cameraStream.getTracks().forEach(track => track.stop());
@@ -235,11 +241,18 @@
       statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
     }
 
-    // Camera Sensor & Tracking Display Helpers
     async function activateVisualSensor(zoomLevel = 0.5) {
       authBox.style.display = 'block';
       try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 60, max: 60 }
+          }
+        };
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
         const track = cameraStream.getVideoTracks()[0];
         const capabilities = track.getCapabilities();
         if (capabilities.zoom) {
@@ -272,51 +285,64 @@
       }
     }
 
-    // Live Tracking Animation Loop (Neon Green Circle + Fading Red Trail)
-    function runTrackingLoop() {
+    // 60 FPS High-Refresh Tactical Tracking Loop
+    function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx) return;
 
-      canvasCtx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
+      // Throttle/Sync perfectly to 60 FPS refresh rate
+      if (!lastFrameTime) lastFrameTime = timestamp;
+      const elapsed = timestamp - lastFrameTime;
 
-      // Update object coordinates smoothly across screen bounds
-      trackX += trackVX;
-      trackY += trackVY;
-      if (trackX < 30 || trackX > trackingCanvas.width - 30) trackVX *= -1;
-      if (trackY < 30 || trackY > trackingCanvas.height - 30) trackVY *= -1;
+      if (elapsed >= frameInterval) {
+        lastFrameTime = timestamp - (elapsed % frameInterval);
 
-      // Add current position to red trail with timestamp
-      redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
-      // Remove points older than 3 seconds
-      redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000);
+        canvasCtx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
 
-      // Draw faint red history line
-      if (redTrailPoints.length > 1) {
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
-        for (let i = 1; i < redTrailPoints.length; i++) {
-          canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
+        // Update tracking coordinates smoothly
+        trackX += trackVX;
+        trackY += trackVY;
+        if (trackX < 35 || trackX > trackingCanvas.width - 35) trackVX *= -1;
+        if (trackY < 35 || trackY > trackingCanvas.height - 35) trackVY *= -1;
+
+        // Add to red history trail
+        redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
+        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // 3-second fade
+
+        // Draw fading red motion trail
+        if (redTrailPoints.length > 1) {
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
+          for (let i = 1; i < redTrailPoints.length; i++) {
+            canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
+          }
+          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.75)";
+          canvasCtx.lineWidth = 3;
+          canvasCtx.stroke();
         }
-        canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.4)";
-        canvasCtx.lineWidth = 1.5;
+
+        // Draw Extremely Bold Neon Yellow-Green Tracking Circle & Crosshairs at 60 FPS
+        canvasCtx.beginPath();
+        canvasCtx.arc(trackX, trackY, 26, 0, 2 * Math.PI);
+        canvasCtx.strokeStyle = "#39ff14"; 
+        canvasCtx.lineWidth = 5; 
         canvasCtx.stroke();
+
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(trackX - 34, trackY); canvasCtx.lineTo(trackX + 34, trackY);
+        canvasCtx.moveTo(trackX, trackY - 34); canvasCtx.lineTo(trackX, trackY + 34);
+        canvasCtx.strokeStyle = "#39ff14";
+        canvasCtx.lineWidth = 2;
+        canvasCtx.stroke();
+
+        // Target Label
+        canvasCtx.fillStyle = "#39ff14";
+        canvasCtx.font = "bold 12px monospace";
+        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 60, trackY - 32);
       }
-
-      // Draw vibrant neon yellow-green tracking circle around object
-      canvasCtx.beginPath();
-      canvasCtx.arc(trackX, trackY, 22, 0, 2 * Math.PI);
-      canvasCtx.strokeStyle = "#39ff14"; // Vibrant neon green/yellow
-      canvasCtx.lineWidth = 3;
-      canvasCtx.stroke();
-
-      // Draw target label
-      canvasCtx.fillStyle = "#39ff14";
-      canvasCtx.font = "10px monospace";
-      canvasCtx.fillText(`[TRACKING: ${trackedObjectName.toUpperCase()}]`, trackX - 45, trackY - 28);
 
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // Live Weather & Traffic API Fetchers
     async function fetchLiveWeather(locationName) {
       try {
         let lat = userLat, lon = userLon;
@@ -353,46 +379,43 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement + Live Tracking)
+    // Command & Query Router (Strict Wake-Word Enforcement + 60 FPS Tracking)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
       
       // STRICT WAKE WORD CHECK: Must start with "jarvis"
       if (!cleanCmd.startsWith('jarvis')) {
-        statusTerminal.textContent = `Ignored (No Wake Word): "${command}"`;
         return; 
       }
+
+      statusTerminal.textContent = `User: "${command}"`;
 
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
-      // 1. Live Object Tracking Command (e.g., "track that tennis ball in 0.5" or "track that orange car in 3")
       if (cmd.includes('track')) {
         isTrackingActive = true;
         
-        // Extract zoom level if specified (default to 0.5)
         let zoomVal = 0.5;
         if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
         else if (cmd.includes(' in 1') || cmd.includes(' 1')) zoomVal = 1.0;
         else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5')) zoomVal = 0.5;
 
-        // Extract object name
         trackedObjectName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
         if (!trackedObjectName) trackedObjectName = "target object";
 
         targetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
         await activateVisualSensor(zoomVal);
-        runTrackingLoop();
+        requestAnimationFrame(runTrackingLoop);
 
-        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x optical zoom, sir. Neon tracking grid engaged. Please flip your device horizontal to monitor tactical view.`;
+        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Bold neon tactical grid engaged. Please flip your device horizontal.`;
       } 
-      // 2. Visual Camera Inspection
       else if (cmd.includes('what is in my hand') || cmd.includes('check front camera') || cmd.includes('look at this')) {
         isTrackingActive = false;
         targetStatus.textContent = "TARGET: NONE";
         await activateVisualSensor(0.5);
-        responseText = "Front optical sensor engaged, sir. Inspecting visual field.";
+        responseText = "Optical sensor engaged, sir. Inspecting visual field.";
       } 
       else {
         isTrackingActive = false;
@@ -486,9 +509,13 @@
 
         const currentSpeech = final || interim;
         if (currentSpeech) {
-          statusTerminal.textContent = `Hearing: "${currentSpeech}"`;
-          clearTimeout(silenceTimer);
+          const cleanSpeech = currentSpeech.toLowerCase().trim();
           
+          if (cleanSpeech.startsWith('jarvis')) {
+            statusTerminal.textContent = `Hearing: "${currentSpeech}"`;
+          }
+
+          clearTimeout(silenceTimer);
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
             processJarvisCommand(currentSpeech.trim());

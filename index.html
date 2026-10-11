@@ -87,7 +87,7 @@
   <button id="listenBtn">Start Continuous Listening</button>
 
   <div class="terminal" id="statusTerminal">
-    System online, sir. Tap start once, then state your query.
+    System online, sir. Click once to engage permanent hands-free mode.
   </div>
 
   <script>
@@ -96,9 +96,9 @@
     let recognition = null;
     let isListening = false;
     let silenceTimer = null;
-    let finalTranscript = "";
+    let currentSpeechBuffer = "";
 
-    // Text-to-Speech function for J.A.R.V.I.S. voice replies
+    // Text-to-Speech function
     function speak(text, callback) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -114,13 +114,15 @@
       }
     }
 
-    // Command router covering all system features
+    // Command router with expanded knowledge base
     function processJarvisCommand(command) {
       if (!command) return;
       const cmd = command.toLowerCase();
       let responseText = "";
       
-      if (cmd.includes('room') || cmd.includes('track my room')) {
+      if (cmd.includes('population') && (cmd.includes('earth') || cmd.includes('world'))) {
+        responseText = "The current population of Earth is approximately 8.3 billion people, sir.";
+      } else if (cmd.includes('room') || cmd.includes('track my room')) {
         responseText = "Initializing room surveillance and thermal imaging feed, sir.";
       } else if (cmd.includes('camera') || cmd.includes('feed')) {
         responseText = "Accessing security camera array now.";
@@ -140,7 +142,13 @@
       }
 
       statusTerminal.textContent = `Command: "${command}"\nResponse: ${responseText}`;
-      speak(responseText);
+      
+      // Speak the response, and once finished, ensure recognition stays alive for hands-free listening
+      speak(responseText, () => {
+        if (isListening && recognition) {
+          try { recognition.start(); } catch(e) {}
+        }
+      });
     }
 
     function initSpeechRecognition() {
@@ -161,77 +169,83 @@
         listenBtn.textContent = "Ready when you are, sir";
         listenBtn.style.background = "#00ffcc";
         listenBtn.style.color = "#000";
-        statusTerminal.textContent = "System active. Listening...";
+        statusTerminal.textContent = "Hands-free mode active. Listening continuously...";
       };
 
       rec.onresult = (event) => {
         let interim = "";
-        finalTranscript = "";
+        let final = "";
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            final += event.results[i][0].transcript;
           } else {
             interim += event.results[i][0].transcript;
           }
         }
 
-        const currentSpeech = finalTranscript || interim;
-        if (currentSpeech) {
-          statusTerminal.textContent = `Hearing: "${currentSpeech}"`;
+        const spokenNow = final || interim;
+        if (spokenNow) {
+          currentSpeechBuffer = spokenNow;
+          statusTerminal.textContent = `Hearing: "${currentSpeechBuffer}"`;
           
-          // Clear previous silence timer on new sound
           clearTimeout(silenceTimer);
-          
-          // Automatically process query after 2 seconds of silence
+          // Wait for 2 seconds of silence to complete the sentence, then process hands-free
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
-            processJarvisCommand(currentSpeech.trim());
-            stopListening();
+            const queryToProcess = currentSpeechBuffer.trim();
+            currentSpeechBuffer = "";
+            processJarvisCommand(queryToProcess);
           }, 2000);
         }
       };
 
       rec.onerror = (event) => {
         console.error("Speech Recognition Error:", event.error);
-        stopListening();
       };
 
+      // Automatically keep the mic loop running for true hands-free operation
       rec.onend = () => {
-        if (isListening && !finalTranscript) {
-          try { rec.start(); } catch (e) { stopListening(); }
+        if (isListening) {
+          try {
+            rec.start();
+          } catch (e) {
+            // Retry after short delay if busy
+            setTimeout(() => {
+              if (isListening) {
+                try { rec.start(); } catch(err) {}
+              }
+            }, 500);
+          }
         }
       };
 
       return rec;
     }
 
-    function stopListening() {
-      isListening = false;
-      clearTimeout(silenceTimer);
-      listenBtn.textContent = "Start Continuous Listening";
-      listenBtn.style.background = "";
-      listenBtn.style.color = "";
-      if (recognition) {
-        try { recognition.stop(); } catch(e) {}
-      }
-    }
-
     listenBtn.addEventListener('click', () => {
       if (!isListening) {
-        // Speak "Yes, sir" first, then fire up the microphone
         speak("Yes, sir", () => {
           recognition = initSpeechRecognition();
           if (recognition) {
             try {
               recognition.start();
             } catch(e) {
-              statusTerminal.textContent = "Mic active. Speak your command.";
+              statusTerminal.textContent = "Mic active. Speak anytime.";
             }
           }
         });
       } else {
-        stopListening();
+        // Turn off hands-free mode
+        isListening = false;
+        listenBtn.textContent = "Start Continuous Listening";
+        listenBtn.style.background = "";
+        listenBtn.style.color = "";
+        if (recognition) {
+          try { recognition.stop(); } catch(e) {}
+        }
+        statusTerminal.textContent = "Continuous listening paused, sir.";
+        speak("Listening paused.");
       }
     });
   </script>

@@ -91,7 +91,7 @@
       word-break: break-word;
     }
 
-    /* Fullscreen Tactical Tracking Overlay (Triggers ONLY during tracking) */
+    /* Fullscreen Horizontal Tactical Tracking Overlay (Triggers ONLY during tracking) */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -105,10 +105,17 @@
       justify-content: center;
       align-items: center;
       overflow: hidden;
+      transform: rotate(90deg);
+      transform-origin: center center;
+      width: 100vh;
+      height: 100vw;
+      position: fixed;
+      top: calc((100vh - 100vw) / 2);
+      left: calc((100vw - 100vh) / 2);
     }
     #tacticalVideo {
-      width: 100vw;
-      height: 100vh;
+      width: 100vh;
+      height: 100vw;
       object-fit: cover;
       position: absolute;
       top: 0;
@@ -118,16 +125,16 @@
       position: absolute;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100vh;
+      height: 100vw;
       pointer-events: none;
     }
     .jarvis-tactical-bar {
       position: absolute;
       bottom: 0;
       left: 0;
-      width: 100%;
-      background: rgba(0, 20, 15, 0.9);
+      width: 100vh;
+      background: rgba(0, 20, 15, 0.95);
       border-top: 2px solid #00ffcc;
       padding: 10px 20px;
       display: flex;
@@ -144,7 +151,7 @@
 
   <h1>J.A.R.V.I.S. SECURITY HUD</h1>
 
-  <!-- Biometric Face Verification Panel -->
+  <!-- Biometric Face Verification Panel (Front Selfie Camera) -->
   <div id="authBox">
     <div id="authStatus" style="font-size: 11px; margin-bottom: 5px;">Scanning biometric profile...</div>
     <video id="webcam" autoplay playsinline muted></video>
@@ -161,7 +168,7 @@
     Security protocol active. Stand by for facial verification.
   </div>
 
-  <!-- Fullscreen Immersive Tactical Tracking View -->
+  <!-- Fullscreen Immersive Horizontal Tactical Tracking View -->
   <div id="tacticalOverlay">
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
@@ -196,15 +203,15 @@
     // 60 FPS Tactical Tracking Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackX = 200, trackY = 150;
-    let trackVX = 4.0, trackVY = 3.0;
+    let trackX = 300, trackY = 200;
+    let trackVX = 4.5, trackVY = 3.2;
     let redTrailPoints = []; 
     let canvasCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
 
-    // Initialize Device Location & Initial Camera Auth
+    // Initialize Device Location & Front Selfie Camera for Biometric Auth
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -215,6 +222,7 @@
       }
 
       try {
+        // Use front selfie camera ('user') for face unlocking
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         webcam.srcObject = cameraStream;
         webcam.onloadedmetadata = () => {
@@ -257,7 +265,7 @@
       }
     }
 
-    // Activate Fullscreen 60 FPS Rear Camera Tracking Mode
+    // Activate Fullscreen Horizontal 60 FPS Rear Camera Tracking Mode
     async function startTrackingMode(objectName, zoomLevel) {
       isTrackingActive = true;
       trackedObjectName = objectName;
@@ -292,8 +300,8 @@
 
       tacticalVideo.srcObject = cameraStream;
       tacticalVideo.onloadedmetadata = () => {
-        tacticalCanvas.width = window.innerWidth;
-        tacticalCanvas.height = window.innerHeight;
+        tacticalCanvas.width = window.innerHeight; // Rotated dimensions
+        tacticalCanvas.height = window.innerWidth;
         canvasCtx = tacticalCanvas.getContext('2d');
         requestAnimationFrame(runTrackingLoop);
       };
@@ -319,7 +327,7 @@
 
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
 
-        // Smooth object motion simulation across screen
+        // Smooth object motion simulation
         trackX += trackVX;
         trackY += trackVY;
         if (trackX < 50 || trackX > tacticalCanvas.width - 50) trackVX *= -1;
@@ -327,7 +335,7 @@
 
         // Add to red history trail
         redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
-        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // Exactly 3-second fade
+        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // 3-second fade
 
         // Draw fading red motion trail tracking prior movement
         if (redTrailPoints.length > 1) {
@@ -345,7 +353,7 @@
         canvasCtx.beginPath();
         canvasCtx.arc(trackX, trackY, 35, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
-        canvasCtx.lineWidth = 7; // Extremely bold
+        canvasCtx.lineWidth = 7; 
         canvasCtx.stroke();
 
         canvasCtx.beginPath();

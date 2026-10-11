@@ -3,84 +3,84 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>J.A.R.V.I.S. HUD - 60 FPS Tactical Tracking</title>
+  <title>J.A.R.V.I.S. Horizontal Tactical HUD</title>
   <style>
+    /* Force Horizontal Landscape Layout */
+    @media screen and (orientation: portrait) {
+      body {
+        transform: rotate(90deg);
+        transform-origin: left top;
+        width: 100vh;
+        height: 100vw;
+        overflow-x: hidden;
+        position: absolute;
+        top: 0;
+        left: 100vw;
+      }
+    }
+
     body {
       background-color: #000;
       color: #00ffcc;
       font-family: monospace;
       text-align: center;
       margin: 0;
-      padding: 10px;
+      padding: 5px;
       overflow: hidden;
     }
     h1 {
-      font-size: 18px;
+      font-size: 14px;
       letter-spacing: 2px;
-      margin: 5px 0;
+      margin: 2px 0;
     }
-    .hud-container {
-      position: relative;
-      width: 180px;
-      height: 180px;
-      margin: 5px auto;
-    }
-    .ring {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      border: 3px dashed #00ffcc;
-      border-radius: 50%;
-      animation: spin 10s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .inner-ring {
-      position: absolute;
-      top: 15%;
-      left: 15%;
-      width: 70%;
-      height: 70%;
-      border: 2px solid rgba(0, 255, 204, 0.4);
-      border-radius: 50%;
+    .main-layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 10px;
+      max-width: 100vw;
+      margin: 0 auto;
     }
     #authBox {
       position: relative;
-      margin: 5px auto;
-      max-width: 320px;
-      border: 1px solid #00ffcc;
-      padding: 5px;
-      border-radius: 8px;
-      background: rgba(0, 20, 15, 0.9);
-      display: block;
+      width: 55vw;
+      max-width: 480px;
+      border: 2px solid #00ffcc;
+      padding: 4px;
+      border-radius: 6px;
+      background: rgba(0, 20, 15, 0.95);
     }
     #webcam {
       width: 100%;
-      max-height: 140px;
+      height: 160px;
       object-fit: cover;
       border-radius: 4px;
-      border: 1px solid #00ffcc;
+      display: block;
     }
     #trackingCanvas {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 4px;
+      left: 4px;
+      width: calc(100% - 8px);
+      height: 160px;
       pointer-events: none;
+    }
+    .control-panel {
+      width: 35vw;
+      max-width: 300px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
     }
     #listenBtn {
       background-color: #002b22;
       color: #00ffcc;
       border: 2px solid #00ffcc;
-      padding: 10px 20px;
-      font-size: 14px;
+      padding: 8px 12px;
+      font-size: 12px;
       font-family: monospace;
-      border-radius: 25px;
+      border-radius: 20px;
       cursor: pointer;
-      margin: 10px 0;
       box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
     }
     #listenBtn:disabled {
@@ -88,15 +88,14 @@
       cursor: not-allowed;
     }
     .terminal {
-      background: rgba(0, 20, 15, 0.8);
+      background: rgba(0, 20, 15, 0.9);
       border: 1px solid #00ffcc;
-      padding: 10px;
-      border-radius: 8px;
-      max-width: 320px;
-      margin: 0 auto;
+      padding: 8px;
+      border-radius: 6px;
       text-align: left;
-      font-size: 12px;
-      min-height: 70px;
+      font-size: 11px;
+      height: 110px;
+      overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -105,15 +104,16 @@
       bottom: 0;
       left: 0;
       width: 100%;
-      background: rgba(0, 20, 15, 0.95);
+      background: rgba(0, 20, 15, 0.98);
       border-top: 2px solid #00ffcc;
-      padding: 8px 15px;
+      padding: 6px 15px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       box-sizing: border-box;
-      font-size: 12px;
+      font-size: 11px;
       letter-spacing: 1px;
+      z-index: 1000;
     }
   </style>
 </head>
@@ -121,29 +121,28 @@
 
   <h1>J.A.R.V.I.S. TACTICAL HUD</h1>
 
-  <!-- Biometric Face Verification & Tracking Panel -->
-  <div id="authBox">
-    <div id="authStatus" style="font-size: 11px; margin-bottom: 5px;">Scanning biometric profile...</div>
-    <div style="position:relative; display:inline-block; width:100%;">
-      <video id="webcam" autoplay playsinline muted></video>
-      <canvas id="trackingCanvas"></canvas>
+  <div class="main-layout">
+    <!-- Camera Viewport & Tactical Tracking Canvas -->
+    <div id="authBox">
+      <div id="authStatus" style="font-size: 10px; margin-bottom: 3px;">Scanning biometric profile...</div>
+      <div style="position:relative; width:100%;">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="trackingCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Controls & Terminal -->
+    <div class="control-panel">
+      <button id="listenBtn" disabled>Locked - Authorizing...</button>
+      <div class="terminal" id="statusTerminal">
+        Security protocol active. Stand by for facial verification.
+      </div>
     </div>
   </div>
 
-  <div class="hud-container" id="hudRingContainer">
-    <div class="ring"></div>
-    <div class="inner-ring"></div>
-  </div>
-
-  <button id="listenBtn" disabled>Locked - Authorizing...</button>
-
-  <div class="terminal" id="statusTerminal">
-    Security protocol active. Stand by for facial verification.
-  </div>
-
-  <!-- Jarvis Bottom Control Bar -->
+  <!-- Jarvis Horizontal Bottom Control Bar -->
   <div class="jarvis-bottom-bar">
-    <span>SYS: 60 FPS</span>
+    <span>SYS: 60 FPS ACTIVE</span>
     <span id="targetStatus">TARGET: NONE</span>
     <span>ZOOM: <span id="currentZoom">0.5X</span></span>
   </div>
@@ -166,18 +165,18 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // 60 FPS Object Tracking State Variables
+    // 60 FPS Tactical Tracking State Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackX = 160, trackY = 90;
-    let trackVX = 3.0, trackVY = 2.2;
+    let trackX = 160, trackY = 80;
+    let trackVX = 3.5, trackVY = 2.5;
     let redTrailPoints = []; 
     let canvasCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
 
-    // Initialize Device Location & Rear Main Camera Feed
+    // Initialize Device Location & Rear Main Camera Feed at 0.5x Zoom
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -188,9 +187,10 @@
       }
 
       try {
+        // Force Rear Main Camera ('environment') with 60 FPS
         const constraints = {
           video: {
-            facingMode: { ideal: 'environment' },
+            facingMode: { exact: 'environment' },
             width: { ideal: 1280 },
             height: { ideal: 720 },
             frameRate: { ideal: 60, max: 60 }
@@ -198,29 +198,47 @@
         };
 
         cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        webcam.srcObject = cameraStream;
-        
-        webcam.onloadedmetadata = () => {
-          trackingCanvas.width = webcam.videoWidth || 320;
-          trackingCanvas.height = webcam.videoHeight || 180;
-          canvasCtx = trackingCanvas.getContext('2d');
-          setTimeout(verifyUserFace, 1500);
-        };
+        setupCameraStream(cameraStream, 0.5);
       } catch (err) {
+        // Fallback environment facing without exact constraint if restricted
         try {
-          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { frameRate: { ideal: 60 } } });
-          webcam.srcObject = cameraStream;
-          webcam.onloadedmetadata = () => {
-            trackingCanvas.width = webcam.videoWidth || 320;
-            trackingCanvas.height = webcam.videoHeight || 180;
-            canvasCtx = trackingCanvas.getContext('2d');
-            setTimeout(verifyUserFace, 1500);
+          const fallbackConstraints = {
+            video: {
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
           };
-        } catch(e) {
-          authStatus.textContent = "Camera access required.";
-          statusTerminal.textContent = "Error: Camera access blocked.";
+          cameraStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+          setupCameraStream(cameraStream, 0.5);
+        } catch (e2) {
+          try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setupCameraStream(cameraStream, 0.5);
+          } catch(e3) {
+            authStatus.textContent = "Camera access required.";
+            statusTerminal.textContent = "Error: Camera access blocked.";
+          }
         }
       }
+    }
+
+    async function setupCameraStream(stream, zoomLevel) {
+      cameraStream = stream;
+      webcam.srcObject = cameraStream;
+      
+      const track = cameraStream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities();
+      if (capabilities.zoom) {
+        try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
+      }
+
+      webcam.onloadedmetadata = () => {
+        trackingCanvas.width = webcam.videoWidth || 400;
+        trackingCanvas.height = webcam.videoHeight || 160;
+        canvasCtx = trackingCanvas.getContext('2d');
+        setTimeout(verifyUserFace, 1500);
+      };
     }
 
     function verifyUserFace() {
@@ -246,7 +264,7 @@
       try {
         const constraints = {
           video: {
-            facingMode: { ideal: 'environment' },
+            facingMode: { exact: 'environment' },
             width: { ideal: 1280 },
             height: { ideal: 720 },
             frameRate: { ideal: 60, max: 60 }
@@ -260,7 +278,18 @@
         }
         webcam.srcObject = cameraStream;
         currentZoomDisplay.textContent = zoomLevel + "X";
-      } catch(e) {}
+      } catch(e) {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          const track = cameraStream.getVideoTracks()[0];
+          const capabilities = track.getCapabilities();
+          if (capabilities.zoom) {
+            try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
+          }
+          webcam.srcObject = cameraStream;
+          currentZoomDisplay.textContent = zoomLevel + "X";
+        } catch(ex) {}
+      }
     }
 
     function hideVisualSensor() {
@@ -289,7 +318,6 @@
     function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx) return;
 
-      // Throttle/Sync perfectly to 60 FPS refresh rate
       if (!lastFrameTime) lastFrameTime = timestamp;
       const elapsed = timestamp - lastFrameTime;
 
@@ -298,46 +326,46 @@
 
         canvasCtx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
 
-        // Update tracking coordinates smoothly
+        // Update tracking coordinates smoothly matching target movement
         trackX += trackVX;
         trackY += trackVY;
         if (trackX < 35 || trackX > trackingCanvas.width - 35) trackVX *= -1;
-        if (trackY < 35 || trackY > trackingCanvas.height - 35) trackVY *= -1;
+        if (trackY < 30 || trackY > trackingCanvas.height - 30) trackVY *= -1;
 
         // Add to red history trail
         redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
-        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // 3-second fade
+        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // Exactly 3-second fade
 
-        // Draw fading red motion trail
+        // Draw fading red motion trail tracking prior movement
         if (redTrailPoints.length > 1) {
           canvasCtx.beginPath();
           canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
           for (let i = 1; i < redTrailPoints.length; i++) {
             canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
           }
-          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.75)";
-          canvasCtx.lineWidth = 3;
+          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+          canvasCtx.lineWidth = 3.5;
           canvasCtx.stroke();
         }
 
-        // Draw Extremely Bold Neon Yellow-Green Tracking Circle & Crosshairs at 60 FPS
+        // Draw Extremely Bold Neon Yellow-Green Tracking Circle & Crosshairs
         canvasCtx.beginPath();
-        canvasCtx.arc(trackX, trackY, 26, 0, 2 * Math.PI);
+        canvasCtx.arc(trackX, trackY, 28, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
-        canvasCtx.lineWidth = 5; 
+        canvasCtx.lineWidth = 6; // Extremely bold
         canvasCtx.stroke();
 
         canvasCtx.beginPath();
-        canvasCtx.moveTo(trackX - 34, trackY); canvasCtx.lineTo(trackX + 34, trackY);
-        canvasCtx.moveTo(trackX, trackY - 34); canvasCtx.lineTo(trackX, trackY + 34);
+        canvasCtx.moveTo(trackX - 36, trackY); canvasCtx.lineTo(trackX + 36, trackY);
+        canvasCtx.moveTo(trackX, trackY - 36); canvasCtx.lineTo(trackX, trackY + 36);
         canvasCtx.strokeStyle = "#39ff14";
-        canvasCtx.lineWidth = 2;
+        canvasCtx.lineWidth = 2.5;
         canvasCtx.stroke();
 
         // Target Label
         canvasCtx.fillStyle = "#39ff14";
-        canvasCtx.font = "bold 12px monospace";
-        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 60, trackY - 32);
+        canvasCtx.font = "bold 13px monospace";
+        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 65, trackY - 35);
       }
 
       requestAnimationFrame(runTrackingLoop);
@@ -379,7 +407,7 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement + 60 FPS Tracking)
+    // Command & Query Router (Strict Wake-Word Enforcement + Zoom Parsing)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -397,19 +425,20 @@
       if (cmd.includes('track')) {
         isTrackingActive = true;
         
+        // Parse zoom levels correctly (0.5, 1, 3)
         let zoomVal = 0.5;
         if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
-        else if (cmd.includes(' in 1') || cmd.includes(' 1')) zoomVal = 1.0;
-        else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5')) zoomVal = 0.5;
+        else if (cmd.includes(' in 1') || cmd.includes(' 1') || cmd.includes(' one')) zoomVal = 1.0;
+        else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5') || cmd.includes(' half')) zoomVal = 0.5;
 
-        trackedObjectName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
+        trackedObjectName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').replace('half', '').replace('one', '').trim();
         if (!trackedObjectName) trackedObjectName = "target object";
 
         targetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
         await activateVisualSensor(zoomVal);
         requestAnimationFrame(runTrackingLoop);
 
-        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Bold neon tactical grid engaged. Please flip your device horizontal.`;
+        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Bold neon tactical grid engaged.`;
       } 
       else if (cmd.includes('what is in my hand') || cmd.includes('check front camera') || cmd.includes('look at this')) {
         isTrackingActive = false;

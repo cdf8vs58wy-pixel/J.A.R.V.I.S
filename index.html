@@ -121,11 +121,6 @@
       transition: all 0.3s ease;
     }
 
-    #listenBtn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
     .terminal {
       background: rgba(0, 20, 15, 0.85);
       border: 1px solid var(--jarvis-cyan);
@@ -211,10 +206,10 @@
         <div class="inner-ring"></div>
       </div>
 
-      <button id="listenBtn" disabled>Security Scan in Progress...</button>
+      <button id="listenBtn">Tap to Initiate Security Scan</button>
 
       <div class="terminal" id="statusTerminal">
-        Initializing security protocols... Stand by for facial verification.
+        System standby. Tap the button above to run biometric facial verification.
       </div>
     </div>
 
@@ -271,7 +266,9 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // Tactical & Target Tracking Subsystem Variables
+    /* -------------------------------------------------------------------------- */
+    /* TACTICAL & TARGET TRACKING SUBSYSTEM VARIABLES                             */
+    /* -------------------------------------------------------------------------- */
     let isTrackingActive = false;
     let trackedObjectName = "";
     let isThermalMode = false;
@@ -284,10 +281,10 @@
     const frameInterval = 1000 / targetFPS;
     let trackingTimeout = null;
 
-    /* -------------------------------------------------------------------------- */
-    /* SYSTEM INITIALIZATION & NON-BLOCKING BIOMETRIC SECURITY SCAN               */
-    /* -------------------------------------------------------------------------- */
-    async function initSystem() {
+    /* ========================================================================== */
+    /* SYSTEM INITIALIZATION & GEOLOCATION ACQUISITION SUBSYSTEM                  */
+    /* ========================================================================== */
+    window.addEventListener('load', () => {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; },
@@ -295,49 +292,11 @@
           { enableHighAccuracy: true, timeout: 5000 }
         );
       }
+    });
 
-      try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        webcam.srcObject = cameraStream;
-      } catch (err) {}
-
-      // Start non-blocking security sequence immediately
-      runBiometricScanSequence();
-    }
-
-    function runBiometricScanSequence() {
-      if (isAuthorized) return;
-
-      statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...";
-      speak("Confirming biometrics.");
-
-      setTimeout(() => {
-        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1...";
-        speak("1.");
-      }, 1000);
-
-      setTimeout(() => {
-        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2...";
-        speak("2.");
-      }, 2000);
-
-      setTimeout(() => {
-        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2... 3...";
-        speak("3.");
-      }, 3000);
-
-      setTimeout(() => {
-        isAuthorized = true;
-        statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
-        speak("Confirmed. Welcome back, sir.");
-        if (cameraStream) {
-          cameraStream.getTracks().forEach(t => t.stop());
-        }
-        listenBtn.disabled = false;
-        listenBtn.textContent = "Start Continuous Listening";
-      }, 4000);
-    }
-
+    /* ========================================================================== */
+    /* SPEECH SYNTHESIS UTILITY SUBSYSTEM                                         */
+    /* ========================================================================== */
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -348,9 +307,65 @@
       }
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* TACTICAL & THERMAL TRACKING SUBSYSTEM (60 FPS)                             */
-    /* -------------------------------------------------------------------------- */
+    /* ========================================================================== */
+    /* STABLE BIOMETRIC SECURITY SCAN SUBSYSTEM (FRONT SELFIE CAMERA)             */
+    /* ========================================================================== */
+    async function startBiometricAuth() {
+      if (isAuthorized) {
+        toggleListeningState();
+        return;
+      }
+
+      listenBtn.disabled = true;
+      listenBtn.textContent = "Scanning Biometrics...";
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        webcam.srcObject = cameraStream;
+        await webcam.play();
+      } catch (err) {}
+
+      statusTerminal.textContent = "Confirming biometrics...";
+      speak("Confirming biometrics.");
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Confirming biometrics...\n1...";
+        speak("1.");
+      }, 1000);
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Confirming biometrics...\n1... 2...";
+        speak("2.");
+      }, 2000);
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Confirming biometrics...\n1... 2... 3...";
+        speak("3.");
+      }, 3000);
+
+      setTimeout(() => {
+        isAuthorized = true;
+        statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
+        speak("Confirmed. Welcome back, sir.");
+        
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(t => t.stop());
+        }
+
+        listenBtn.disabled = false;
+        listenBtn.textContent = "Start Continuous Listening";
+        speak("Yes, sir");
+        
+        recognition = initSpeechRecognition();
+        if (recognition) {
+          try { recognition.start(); } catch(e) {}
+        }
+      }, 4000);
+    }
+
+    /* ========================================================================== */
+    /* 60 FPS TACTICAL & THERMAL ROOM VISION RENDERING SUBSYSTEM                  */
+    /* ========================================================================== */
     async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
       isTrackingActive = true;
       isThermalMode = thermal;
@@ -496,18 +511,18 @@
 
         canvasCtx.beginPath();
         canvasCtx.arc(trackX, trackY, 40, 0, 2 * Math.PI);
-        canvasCtx.strokeStyle = "var(--jarvis-neon)"; 
+        canvasCtx.strokeStyle = "#39ff14"; 
         canvasCtx.lineWidth = 7; 
         canvasCtx.stroke();
 
         canvasCtx.beginPath();
         canvasCtx.moveTo(trackX - 50, trackY); canvasCtx.lineTo(trackX + 50, trackY);
         canvasCtx.moveTo(trackX, trackY - 50); canvasCtx.lineTo(trackX, trackY + 50);
-        canvasCtx.strokeStyle = "var(--jarvis-neon)";
+        canvasCtx.strokeStyle = "#39ff14";
         canvasCtx.lineWidth = 3;
         canvasCtx.stroke();
 
-        canvasCtx.fillStyle = "var(--jarvis-neon)";
+        canvasCtx.fillStyle = "#39ff14";
         canvasCtx.font = "bold 16px monospace";
         canvasCtx.fillText(`[TARGET LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 85, trackY - 48);
       }
@@ -515,9 +530,9 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* WEATHER, TRAFFIC & POWER DIAGNOSTICS MODULES                               */
-    /* -------------------------------------------------------------------------- */
+    /* ========================================================================== */
+    /* WEATHER, TRAFFIC & POWER DIAGNOSTICS API SUBSYSTEMS                        */
+    /* ========================================================================== */
     async function fetchLiveWeather(locationName) {
       try {
         let lat = userLat, lon = userLon;
@@ -566,15 +581,15 @@
       return "Power diagnostics nominal. System power output operating at 100 percent capacity, sir.";
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* COMMAND PARSER & VOICE ROUTING ENGINE                                    */
-    /* -------------------------------------------------------------------------- */
+    /* ========================================================================== */
+    /* COMMAND PARSER & VOICE ROUTING ENGINE                                      */
+    /* ========================================================================== */
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
       
       if (!cleanCmd.startsWith('jarvis')) {
-        return; // Strict wake-word filter
+        return; 
       }
 
       statusTerminal.textContent = `User: "${command}"`;
@@ -637,97 +652,61 @@
       else if (cmd.includes('power') || cmd.includes('battery') || cmd.includes('diagnostic')) {
         responseText = await getPowerStatus();
       }
+      else if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
+        responseText = "Launching Spotify app, sir.";
+        appLauncherFrame.src = "spotify://";
+      }
+      else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
+        responseText = "Opening navigation route map, sir.";
+        window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
+      }
+      else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
+        let targetDest = "Canterbury";
+        if (cmd.includes('london')) targetDest = "London";
+        responseText = await fetchLiveTraffic(targetDest);
+      }
+      else if (cmd.includes('weather')) {
+        let targetLoc = "Dover";
+        if (cmd.includes('canterbury')) targetLoc = "Canterbury";
+        else if (cmd.includes('london')) targetLoc = "London";
+        const w = await fetchLiveWeather(targetLoc);
+        responseText = w.text;
+      }
+      else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday') || cmd.includes('pm') || cmd.includes('am')) {
+        let eventSummary = "No scheduled events found";
+        if (cmd.includes('thursday')) {
+          eventSummary = "You have Football trainings scheduled on Thursday from 7:30 PM to 8:30 PM";
+        } else if (cmd.includes('tuesday')) {
+          eventSummary = "You have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
+        } else if (cmd.includes('wednesday')) {
+          eventSummary = "You have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
+        }
+
+        responseText = `${eventSummary}, sir. Opening your calendar now.`;
+        appLauncherFrame.src = "calshow://";
+      }
       else if (cmd.includes('thermal') || cmd.includes('night vision')) {
-        homeworkPanel.style.display = 'none';
         let zoomVal = 0.5;
         if (cmd.includes('0.5')) zoomVal = 0.5;
         else if (cmd.includes('3')) zoomVal = 3.0;
         else if (cmd.includes('1')) zoomVal = 1.0;
-
-        let duration = 30;
-        if (cmd.includes('for 60')) duration = 60;
-        else if (cmd.includes('for 10')) duration = 10;
-
-        startTrackingMode("Room Thermal Scan", zoomVal, true, duration);
-        responseText = `Engaging thermal room tracking for ${duration} seconds at ${zoomVal}x zoom, sir.`;
+        startTrackingMode("Room Thermal Scan", zoomVal, true, 30);
+        responseText = `Engaging thermal room tracking for 30 seconds at ${zoomVal}x zoom, sir.`;
       }
       else if (cmd.includes('track')) {
-        homeworkPanel.style.display = 'none';
         let zoomVal = 0.5;
-        if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
-        else if (cmd.includes(' in 1') || cmd.includes(' 1') || cmd.includes(' one')) zoomVal = 1.0;
-        else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5') || cmd.includes(' half')) zoomVal = 0.5;
-
-        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').replace('half', '').replace('one', '').trim();
+        if (cmd.includes('3')) zoomVal = 3.0;
+        else if (cmd.includes('1')) zoomVal = 1.0;
+        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
         if (!objName) objName = "target object";
-
         startTrackingMode(objName, zoomVal, false, 0);
-        responseText = `Locking onto ${objName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Target tracking engaged.`;
-      } 
-      else {
-        stopTrackingMode();
-        homeworkPanel.style.display = 'none';
-
-        if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
-          responseText = "Launching Spotify app, sir.";
-          appLauncherFrame.src = "spotify://";
-        }
-        else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
-          responseText = "Opening navigation route map, sir.";
-          window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
-        }
-        else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
-          let targetDest = "Canterbury";
-          if (cmd.includes('london')) targetDest = "London";
-          responseText = await fetchLiveTraffic(targetDest);
-        }
-        else if (cmd.includes('weather')) {
-          let targetLoc = "Dover";
-          if (cmd.includes('canterbury')) targetLoc = "Canterbury";
-          else if (cmd.includes('london')) targetLoc = "London";
-          const w = await fetchLiveWeather(targetLoc);
-          responseText = w.text;
-        }
-        else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday') || cmd.includes('pm') || cmd.includes('am')) {
-          let eventSummary = "No scheduled events found";
-          if (cmd.includes('thursday')) {
-            eventSummary = "You have Football trainings scheduled on Thursday from 7:30 PM to 8:30 PM";
-          } else if (cmd.includes('tuesday')) {
-            eventSummary = "You have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
-          } else if (cmd.includes('wednesday')) {
-            eventSummary = "You have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
-          }
-
-          responseText = `${eventSummary}, sir. Opening your calendar now.`;
-          appLauncherFrame.src = "calshow://";
-        }
-        else if (cmd.includes('time in')) {
-          try {
-            let timeZone = "UTC";
-            if (cmd.includes('india')) timeZone = "Asia/Kolkata";
-            else if (cmd.includes('japan') || cmd.includes('tokyo')) timeZone = "Asia/Tokyo";
-            else if (cmd.includes('new york') || cmd.includes('america')) timeZone = "America/New_York";
-            else if (cmd.includes('london')) timeZone = "Europe/London";
-            else if (cmd.includes('australia') || cmd.includes('sydney')) timeZone = "Australia/Sydney";
-            
-            const foreignTime = new Date().toLocaleTimeString('en-US', { timeZone: timeZone, hour: '2-digit', minute: '2-digit' });
-            responseText = `The current time in that region is ${foreignTime}, sir.`;
-          } catch(e) {
-            responseText = "Unable to compute timezone offset for that location, sir.";
-          }
-        }
-        else if (cmd.includes('population') && (cmd.includes('earth') || cmd.includes('world'))) {
-          responseText = "The current population of Earth is approximately 8.3 billion people, sir.";
-        } else if (cmd.includes('kangaroo')) {
-          responseText = "There are approximately 50 million kangaroos in Australia, sir.";
-        } else if (cmd.includes('speed of light')) {
-          responseText = "The speed of light in a vacuum is approximately 299,792 kilometers per second, sir.";
-        } else if (cmd.includes('time')) {
-          const now = new Date();
-          responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
-        } else {
-          responseText = `Query processed for "${command}". All systems operating at peak capacity, sir.`;
-        }
+        responseText = `Locking onto ${objName} at ${zoomVal}x zoom, sir.`;
+      }
+      else if (cmd.includes('time')) {
+        const now = new Date();
+        responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
+      } else {
+        responseText = `Query processed for "${command}". All systems operating at peak capacity, sir.`;
       }
 
       statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
@@ -737,6 +716,9 @@
       }
     }
 
+    /* ========================================================================== */
+    /* SPEECH RECOGNITION & CONTINUOUS HANDS-FREE LOOP SUBSYSTEM                  */
+    /* ========================================================================== */
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return null;
@@ -749,7 +731,7 @@
       rec.onstart = () => {
         isListening = true;
         listenBtn.textContent = "Listening Hands-Free...";
-        listenBtn.style.background = "var(--jarvis-cyan)";
+        listenBtn.style.background = "#00ffcc";
         listenBtn.style.color = "#000";
       };
 
@@ -767,7 +749,6 @@
         const currentSpeech = final || interim;
         if (currentSpeech) {
           const cleanSpeech = currentSpeech.toLowerCase().trim();
-          
           if (cleanSpeech.startsWith('jarvis')) {
             statusTerminal.textContent = `Hearing: "${currentSpeech}"`;
           }
@@ -791,9 +772,7 @@
       return rec;
     }
 
-    listenBtn.addEventListener('click', () => {
-      if (!isAuthorized) return;
-      
+    function toggleListeningState() {
       if (!isListening) {
         speak("Yes, sir");
         recognition = initSpeechRecognition();
@@ -808,9 +787,9 @@
         if (recognition) { try { recognition.stop(); } catch(e) {} }
         statusTerminal.textContent = "Listening paused, sir.";
       }
-    });
+    }
 
-    window.addEventListener('load', initSystem);
+    listenBtn.addEventListener('click', startBiometricAuth);
   </script>
 </body>
 </html>

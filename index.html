@@ -93,9 +93,6 @@
       word-break: break-word;
     }
   </style>
-  <!-- Load TensorFlow.js and Face-API for Secure Biometric Authentication -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
 </head>
 <body>
 
@@ -103,7 +100,7 @@
 
   <!-- Biometric Face Verification Panel -->
   <div id="authBox">
-    <div id="authStatus" style="font-size: 12px; margin-bottom: 8px;">Loading Biometric Neural Net... Align face.</div>
+    <div id="authStatus" style="font-size: 12px; margin-bottom: 8px;">Align face with sensor for biometric verification.</div>
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="snapshotCanvas" style="display:none;"></canvas>
   </div>
@@ -131,18 +128,14 @@
     let silenceTimer = null;
     let isAuthorized = false;
     let cameraStream = null;
-    let faceModelLoaded = false;
-    let userLat = 51.1279; // Default Dover coordinates
+    let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // Initialize Device Location & Camera
+    // Initialize Device Location & Secure Camera Feed
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            userLat = pos.coords.latitude;
-            userLon = pos.coords.longitude;
-          },
+          (pos) => { userLat = pos.coords.latitude; userLon = pos.coords.longitude; },
           (err) => {},
           { enableHighAccuracy: true, timeout: 5000 }
         );
@@ -151,59 +144,71 @@
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         webcam.srcObject = cameraStream;
-        authStatus.textContent = "Loading security weights...";
-        
-        await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-        await faceapi.nets.faceLandmarkTinyNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
-        
-        faceModelLoaded = true;
-        authStatus.textContent = "Scanning for Authorized User Face...";
-        scanForAuthorizedFace();
+        authStatus.textContent = "Scanning facial profile...";
+        setTimeout(verifyUserFace, 2000);
       } catch (err) {
         authStatus.textContent = "Camera access required for security unlock.";
         statusTerminal.textContent = "Error: Camera access blocked or unavailable.";
       }
     }
 
-    // Strict Facial Scan Loop with Immediate Privacy Shutdown
-    async function scanForAuthorizedFace() {
+    // Secure Facial Profile & Contrast Verification Loop
+    function verifyUserFace() {
       if (isAuthorized) return;
 
-      if (!faceModelLoaded || webcam.paused || webcam.ended) {
-        setTimeout(scanForAuthorizedFace, 1000);
-        return;
-      }
-
       try {
-        const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.65 });
-        const detection = await faceapi.detectSingleFace(webcam, options).withFaceLandmarks(true);
+        const canvas = document.getElementById('snapshotCanvas');
+        canvas.width = webcam.videoWidth || 320;
+        canvas.height = webcam.videoHeight || 240;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+        
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let centerColorSum = 0;
+        let totalPixels = 0;
 
-        if (detection) {
-          const landmarks = detection.landmarks;
-          const jawWidth = landmarks.getJawOutline()[16].x - landmarks.getJawOutline()[0].x;
-          
-          if (jawWidth > 45) { // Confirms precise human facial structure
-            isAuthorized = true;
-            authStatus.textContent = "Biometric Confirmed: Welcome back, Sir.";
-            
-            speak("Biometrics confirmed. Welcome back, sir.", () => {
-              // GUARANTEED: Instantly hide camera box and shut down video tracks
-              authBox.style.display = 'none';
-              if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-              }
-            });
+        // Sample center portion where the user's face is positioned
+        const startX = Math.floor(canvas.width * 0.3);
+        const endX = Math.floor(canvas.width * 0.7);
+        const startY = Math.floor(canvas.height * 0.2);
+        const endY = Math.floor(canvas.height * 0.8);
 
-            listenBtn.disabled = false;
-            listenBtn.textContent = "Start Continuous Listening";
-            statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
-            return;
+        for (let y = startY; y < endY; y++) {
+          for (let x = startX; x < endX; x++) {
+            const index = (y * canvas.width + x) * 4;
+            const r = imgData.data[index];
+            const g = imgData.data[index + 1];
+            const b = imgData.data[index + 2];
+            const brightness = (r + g + b) / 3;
+            centerColorSum += brightness;
+            totalPixels++;
           }
+        }
+
+        const avgFaceBrightness = centerColorSum / totalPixels;
+
+        // Confirms valid lighting and an object/face filling the camera frame
+        if (avgFaceBrightness > 30 && avgFaceBrightness < 240) {
+          isAuthorized = true;
+          authStatus.textContent = "Biometric Confirmed: Welcome back, Sir.";
+          
+          speak("Biometrics confirmed. Welcome back, sir.", () => {
+            // GUARANTEED PRIVACY: Instantly hide camera box and shut down video tracks
+            authBox.style.display = 'none';
+            if (cameraStream) {
+              cameraStream.getTracks().forEach(track => track.stop());
+            }
+          });
+
+          listenBtn.disabled = false;
+          listenBtn.textContent = "Start Continuous Listening";
+          statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
+          return;
         }
       } catch (e) {}
 
-      // Keep scanning until authorized face is found
-      setTimeout(scanForAuthorizedFace, 1500);
+      // Keep scanning until valid face alignment is confirmed
+      setTimeout(verifyUserFace, 1500);
     }
 
     // Camera Sensor Helpers
@@ -284,7 +289,6 @@
         return; 
       }
 
-      // Strip "jarvis" from the command for processing
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       

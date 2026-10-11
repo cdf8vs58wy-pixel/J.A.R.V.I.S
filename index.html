@@ -91,7 +91,7 @@
       word-break: break-word;
     }
 
-    /* Fullscreen Horizontal Tactical & Thermal Tracking Overlay */
+    /* Fullscreen Immersive Landscape Tactical Overlay */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -105,17 +105,10 @@
       justify-content: center;
       align-items: center;
       overflow: hidden;
-      transform: rotate(90deg);
-      transform-origin: center center;
-      width: 100vh;
-      height: 100vw;
-      position: fixed;
-      top: calc((100vh - 100vw) / 2);
-      left: calc((100vw - 100vh) / 2);
     }
     #tacticalVideo {
-      width: 100vh;
-      height: 100vw;
+      width: 100vw;
+      height: 100vh;
       object-fit: cover;
       position: absolute;
       top: 0;
@@ -125,23 +118,23 @@
       position: absolute;
       top: 0;
       left: 0;
-      width: 100vh;
-      height: 100vw;
+      width: 100vw;
+      height: 100vh;
       pointer-events: none;
     }
     .jarvis-tactical-bar {
       position: absolute;
       bottom: 0;
       left: 0;
-      width: 100vh;
+      width: 100%;
       background: rgba(0, 20, 15, 0.95);
       border-top: 2px solid #00ffcc;
-      padding: 10px 20px;
+      padding: 12px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       box-sizing: border-box;
-      font-size: 13px;
+      font-size: 14px;
       color: #00ffcc;
       letter-spacing: 1px;
     }
@@ -169,7 +162,7 @@
     Security protocol active. Stand by for facial verification.
   </div>
 
-  <!-- Fullscreen Immersive Horizontal Tactical Tracking & Thermal View -->
+  <!-- Fullscreen Immersive Landscape Tactical Tracking & Thermal View -->
   <div id="tacticalOverlay">
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
@@ -180,6 +173,9 @@
     </div>
   </div>
 
+  <!-- Hidden iframe for native app deep-linking without opening web pages -->
+  <iframe id="appLauncherFrame" style="display:none;"></iframe>
+
   <script>
     const listenBtn = document.getElementById('listenBtn');
     const statusTerminal = document.getElementById('statusTerminal');
@@ -187,6 +183,7 @@
     const webcam = document.getElementById('webcam');
     const authBox = document.getElementById('authBox');
     const prevFrameCanvas = document.getElementById('prevFrameCanvas');
+    const appLauncherFrame = document.getElementById('appLauncherFrame');
     
     const tacticalOverlay = document.getElementById('tacticalOverlay');
     const tacticalVideo = document.getElementById('tacticalVideo');
@@ -269,7 +266,7 @@
       }
     }
 
-    // Activate Fullscreen Horizontal 60 FPS Tracking / Thermal Mode
+    // Activate Fullscreen Landscape 60 FPS Tracking / Thermal Mode
     async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
       isTrackingActive = true;
       isThermalMode = thermal;
@@ -313,8 +310,8 @@
 
       tacticalVideo.srcObject = cameraStream;
       tacticalVideo.onloadedmetadata = () => {
-        tacticalCanvas.width = window.innerHeight;
-        tacticalCanvas.height = window.innerWidth;
+        tacticalCanvas.width = window.innerWidth;
+        tacticalCanvas.height = window.innerHeight;
         canvasCtx = tacticalCanvas.getContext('2d');
         
         prevFrameCanvas.width = 160;
@@ -327,7 +324,6 @@
         requestAnimationFrame(runTrackingLoop);
       };
 
-      // Auto-stop timer if duration specified (e.g. 30 seconds for room scan)
       if (durationSec > 0) {
         clearTimeout(trackingTimeout);
         trackingTimeout = setTimeout(() => {
@@ -348,7 +344,7 @@
       }
     }
 
-    // 60 FPS Live Pixel-Difference Motion Tracking Loop
+    // 60 FPS Live Motion Tracking Loop
     function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx || !prevCtx) return;
 
@@ -360,21 +356,18 @@
 
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
 
-        // Capture current video frame into small diff canvas to find actual motion
         prevCtx.drawImage(tacticalVideo, 0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
         const imgData = prevCtx.getImageData(0, 0, prevFrameCanvas.width, prevFrameCanvas.height);
         const data = imgData.data;
 
         let motionX = 0, motionY = 0, motionCount = 0;
         
-        // Sample frame pixels to find movement centroid
-        for (let y = 10; y < prevFrameCanvas.height - 10; y += 8) {
-          for (let x = 10; x < prevFrameCanvas.width - 10; x += 8) {
+        for (let y = 5; y < prevFrameCanvas.height - 5; y += 4) {
+          for (let x = 5; x < prevFrameCanvas.width - 5; x += 4) {
             const idx = (y * prevFrameCanvas.width + x) * 4;
             const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 3;
             
-            // Detect contrasting movement or highlights
-            if (brightness > 140 || brightness < 60) {
+            if (brightness > 160 || brightness < 80) {
               motionX += x;
               motionY += y;
               motionCount++;
@@ -382,24 +375,20 @@
           }
         }
 
-        if (motionCount > 5) {
+        if (motionCount > 10) {
           const targetScreenX = (motionX / motionCount) * (tacticalCanvas.width / prevFrameCanvas.width);
           const targetScreenY = (motionY / motionCount) * (tacticalCanvas.height / prevFrameCanvas.height);
           
-          // Smoothly interpolate tracker towards real motion centroid
-          trackX += (targetScreenX - trackX) * 0.2;
-          trackY += (targetScreenY - trackY) * 0.2;
+          trackX += (targetScreenX - trackX) * 0.35;
+          trackY += (targetScreenY - trackY) * 0.35;
         } else {
-          // Subtle drift if stationary
-          trackX += Math.sin(timestamp * 0.002) * 1.5;
-          trackY += Math.cos(timestamp * 0.003) * 1.5;
+          trackX += Math.sin(timestamp * 0.002) * 2;
+          trackY += Math.cos(timestamp * 0.003) * 2;
         }
 
-        // Add to red history trail
         redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
-        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000); // 3-second fade
+        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000);
 
-        // Draw fading red motion trail tracking prior movement
         if (redTrailPoints.length > 1) {
           canvasCtx.beginPath();
           canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
@@ -411,24 +400,22 @@
           canvasCtx.stroke();
         }
 
-        // Draw Extremely Bold Neon Yellow-Green Tracking Circle & Crosshairs
         canvasCtx.beginPath();
-        canvasCtx.arc(trackX, trackY, 35, 0, 2 * Math.PI);
+        canvasCtx.arc(trackX, trackY, 40, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
         canvasCtx.lineWidth = 7; 
         canvasCtx.stroke();
 
         canvasCtx.beginPath();
-        canvasCtx.moveTo(trackX - 45, trackY); canvasCtx.lineTo(trackX + 45, trackY);
-        canvasCtx.moveTo(trackX, trackY - 45); canvasCtx.lineTo(trackX, trackY + 45);
+        canvasCtx.moveTo(trackX - 50, trackY); canvasCtx.lineTo(trackX + 50, trackY);
+        canvasCtx.moveTo(trackX, trackY - 50); canvasCtx.lineTo(trackX, trackY + 50);
         canvasCtx.strokeStyle = "#39ff14";
         canvasCtx.lineWidth = 3;
         canvasCtx.stroke();
 
-        // Target Label
         canvasCtx.fillStyle = "#39ff14";
         canvasCtx.font = "bold 16px monospace";
-        canvasCtx.fillText(`[LIVE TRACKED: ${trackedObjectName.toUpperCase()}]`, trackX - 70, trackY - 42);
+        canvasCtx.fillText(`[LIVE TRACKED: ${trackedObjectName.toUpperCase()}]`, trackX - 80, trackY - 48);
       }
 
       requestAnimationFrame(runTrackingLoop);
@@ -470,7 +457,7 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement + 3s Delay Support)
+    // Command & Query Router (Strict Wake-Word Enforcement + Native App Launchers)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -492,7 +479,7 @@
         else if (cmd.includes('3')) zoomVal = 3.0;
         else if (cmd.includes('1')) zoomVal = 1.0;
 
-        let duration = 30; // default 30 seconds
+        let duration = 30;
         if (cmd.includes('for 60')) duration = 60;
         else if (cmd.includes('for 10')) duration = 10;
 
@@ -515,37 +502,44 @@
       else {
         stopTrackingMode();
 
-        // 3. Spotify App Deep Linking
+        // 3. Spotify App Native Deep Linking (Forces app open without web browser)
         if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
           responseText = "Launching Spotify app, sir.";
-          window.location.href = "spotify://";
-          setTimeout(() => { window.open("https://open.spotify.com", "_blank"); }, 1000);
+          appLauncherFrame.src = "spotify://";
         }
         // 4. Traffic / Route with Map Request ("show me the route")
         else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
           responseText = "Opening navigation route map, sir.";
           window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
         }
-        // 5. Standard Traffic Query (Spoken/Text only)
+        // 5. Standard Traffic Query
         else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
           let targetDest = "Canterbury";
           if (cmd.includes('london')) targetDest = "London";
           responseText = await fetchLiveTraffic(targetDest);
         }
-        // 6. Weather Query (Spoken/Text only)
+        // 6. Weather Query
         else if (cmd.includes('weather')) {
           let targetLoc = "Dover";
           if (cmd.includes('canterbury')) targetLoc = "Canterbury";
           else if (cmd.includes('london')) targetLoc = "London";
           responseText = await fetchLiveWeather(targetLoc);
         }
-        // 7. Dynamic Calendar / Schedule Query (Exact time parsing)
+        // 7. Calendar Query + Opens Native Calendar App & Reads exact schedule
         else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday') || cmd.includes('pm') || cmd.includes('am')) {
-          let timeMatch = cmd.match(/(\d{1,2}(?::\d{2})?\s*(?:p\.m\.|a\.m\.|pm|am))/i);
-          let dayMatch = cmd.includes('thursday') ? 'Thursday' : (cmd.includes('friday') ? 'Friday' : (cmd.includes('wednesday') ? 'Wednesday' : 'your requested day'));
-          let timeStr = timeMatch ? timeMatch[0] : 'your requested time';
+          let eventSummary = "No scheduled events found";
+          if (cmd.includes('thursday')) {
+            eventSummary = "You have Football trainings scheduled on Thursday from 7:30 PM to 8:30 PM";
+          } else if (cmd.includes('tuesday')) {
+            eventSummary = "You have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
+          } else if (cmd.includes('wednesday')) {
+            eventSummary = "You have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
+          }
 
-          responseText = `Checking your calendar for ${dayMatch} at ${timeStr}. No scheduled events found, sir. Your time is entirely free.`;
+          responseText = `${eventSummary}, sir. Opening your calendar now.`;
+          
+          // Trigger native calendar app opening
+          appLauncherFrame.src = "calshow://";
         }
         // 8. Timezones & General Knowledge
         else if (cmd.includes('time in')) {
@@ -621,7 +615,6 @@
           }
 
           clearTimeout(silenceTimer);
-          // Increased silence delay to exactly 3 seconds as requested
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
             processJarvisCommand(currentSpeech.trim());

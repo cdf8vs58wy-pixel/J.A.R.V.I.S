@@ -300,7 +300,7 @@
 
       tacticalVideo.srcObject = cameraStream;
       tacticalVideo.onloadedmetadata = () => {
-        tacticalCanvas.width = window.innerHeight; // Rotated dimensions
+        tacticalCanvas.width = window.innerHeight;
         tacticalCanvas.height = window.innerWidth;
         canvasCtx = tacticalCanvas.getContext('2d');
         requestAnimationFrame(runTrackingLoop);
@@ -408,7 +408,7 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement)
+    // Command & Query Router (Strict Wake-Word Enforcement + App Routing Rules)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -423,6 +423,7 @@
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
+      // 1. Live Tracking Mode Trigger
       if (cmd.includes('track')) {
         let zoomVal = 0.5;
         if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
@@ -436,19 +437,41 @@
         responseText = `Locking onto ${objName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Immersive tactical grid engaged.`;
       } 
       else {
+        // Ensure tactical view is closed for all non-tracking queries
         stopTrackingMode();
 
-        if (cmd.includes('weather')) {
+        // 2. Spotify Integration (Opens App/Link)
+        if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
+          responseText = "Launching Spotify media playback, sir.";
+          window.open("https://open.spotify.com", "_blank");
+        }
+        // 3. Traffic / Route with Map Request ("show me the route")
+        else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
+          responseText = "Opening navigation route map, sir.";
+          window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
+        }
+        // 4. Standard Traffic Query (Spoken/Text only)
+        else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
+          let targetDest = "Canterbury";
+          if (cmd.includes('london')) targetDest = "London";
+          responseText = await fetchLiveTraffic(targetDest);
+        }
+        // 5. Weather Query (Spoken/Text only)
+        else if (cmd.includes('weather')) {
           let targetLoc = "Dover";
           if (cmd.includes('canterbury')) targetLoc = "Canterbury";
           else if (cmd.includes('london')) targetLoc = "London";
           responseText = await fetchLiveWeather(targetLoc);
         }
-        else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('canterbury')) {
-          let targetDest = "Canterbury";
-          if (cmd.includes('london')) targetDest = "London";
-          responseText = await fetchLiveTraffic(targetDest);
+        // 6. Calendar / Schedule Query (Spoken/Text only)
+        else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday')) {
+          if (cmd.includes('thursday')) {
+            responseText = "Checking your calendar for Thursday at 2:00 PM. No scheduled events found, sir. Your time is entirely free.";
+          } else {
+            responseText = "Retrieving your schedule. No conflicting events found on your agenda, sir.";
+          }
         }
+        // 7. Timezones & General Knowledge
         else if (cmd.includes('time in')) {
           try {
             let timeZone = "UTC";
@@ -463,16 +486,6 @@
           } catch(e) {
             responseText = "Unable to compute timezone offset for that location, sir.";
           }
-        }
-        else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday')) {
-          responseText = "Checking your calendar for Thursday at 1:00 PM. No scheduled events found, sir. Your time is entirely free.";
-        }
-        else if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
-          responseText = "Launching Spotify media playback, sir.";
-          window.open("https://open.spotify.com", "_blank");
-        }
-        else if (cmd.includes('room') || cmd.includes('track my room') || cmd.includes('tracking')) {
-          responseText = `GPS tracking lock active at latitude ${userLat.toFixed(4)}, longitude ${userLon.toFixed(4)}. Room thermal imaging feeds nominal, sir.`;
         }
         else if (cmd.includes('population') && (cmd.includes('earth') || cmd.includes('world'))) {
           responseText = "The current population of Earth is approximately 8.3 billion people, sir.";

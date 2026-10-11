@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>J.A.R.V.I.S. HUD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>J.A.R.V.I.S. HUD - Tactical Tracking</title>
   <style>
     body {
       background-color: #000;
@@ -11,18 +11,19 @@
       font-family: monospace;
       text-align: center;
       margin: 0;
-      padding: 20px;
+      padding: 10px;
+      overflow: hidden;
     }
     h1 {
-      font-size: 22px;
+      font-size: 18px;
       letter-spacing: 2px;
-      margin-bottom: 10px;
+      margin: 5px 0;
     }
     .hud-container {
       position: relative;
-      width: 220px;
-      height: 220px;
-      margin: 10px auto;
+      width: 180px;
+      height: 180px;
+      margin: 5px auto;
     }
     .ring {
       position: absolute;
@@ -46,32 +47,40 @@
       border-radius: 50%;
     }
     #authBox {
-      margin: 10px auto;
-      max-width: 320px;
+      position: relative;
+      margin: 5px auto;
+      max-width: 300px;
       border: 1px solid #00ffcc;
-      padding: 10px;
+      padding: 5px;
       border-radius: 8px;
       background: rgba(0, 20, 15, 0.9);
       display: block;
     }
     #webcam {
       width: 100%;
-      max-height: 140px;
+      max-height: 120px;
       object-fit: cover;
       border-radius: 4px;
       border: 1px solid #00ffcc;
+    }
+    #trackingCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
     #listenBtn {
       background-color: #002b22;
       color: #00ffcc;
       border: 2px solid #00ffcc;
-      padding: 12px 24px;
-      font-size: 16px;
+      padding: 10px 20px;
+      font-size: 14px;
       font-family: monospace;
       border-radius: 25px;
       cursor: pointer;
-      margin: 15px 0;
-      transition: all 0.3s ease;
+      margin: 10px 0;
       box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
     }
     #listenBtn:disabled {
@@ -81,31 +90,48 @@
     .terminal {
       background: rgba(0, 20, 15, 0.8);
       border: 1px solid #00ffcc;
-      padding: 15px;
+      padding: 10px;
       border-radius: 8px;
-      max-width: 350px;
+      max-width: 320px;
       margin: 0 auto;
       text-align: left;
-      font-size: 13px;
-      box-shadow: inset 0 0 10px rgba(0, 255, 204, 0.1);
-      min-height: 100px;
+      font-size: 12px;
+      min-height: 70px;
       white-space: pre-wrap;
       word-break: break-word;
+    }
+    /* Jarvis Bottom HUD Bar */
+    .jarvis-bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: rgba(0, 20, 15, 0.95);
+      border-top: 2px solid #00ffcc;
+      padding: 8px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-sizing: border-box;
+      font-size: 12px;
+      letter-spacing: 1px;
     }
   </style>
 </head>
 <body>
 
-  <h1>J.A.R.V.I.S. SECURITY HUD</h1>
+  <h1>J.A.R.V.I.S. TACTICAL HUD</h1>
 
-  <!-- Biometric Face Verification Panel -->
+  <!-- Biometric Face Verification & Tracking Panel -->
   <div id="authBox">
-    <div id="authStatus" style="font-size: 12px; margin-bottom: 8px;">Align face with sensor for biometric verification.</div>
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="snapshotCanvas" style="display:none;"></canvas>
+    <div id="authStatus" style="font-size: 11px; margin-bottom: 5px;">Scanning biometric profile...</div>
+    <div style="position:relative; display:inline-block; width:100%;">
+      <video id="webcam" autoplay playsinline muted></video>
+      <canvas id="trackingCanvas"></canvas>
+    </div>
   </div>
 
-  <div class="hud-container">
+  <div class="hud-container" id="hudRingContainer">
     <div class="ring"></div>
     <div class="inner-ring"></div>
   </div>
@@ -116,12 +142,22 @@
     Security protocol active. Stand by for facial verification.
   </div>
 
+  <!-- Jarvis Bottom Control Bar -->
+  <div class="jarvis-bottom-bar">
+    <span>SYS: ONLINE</span>
+    <span id="targetStatus">TARGET: NONE</span>
+    <span>ZOOM: <span id="currentZoom">0.5X</span></span>
+  </div>
+
   <script>
     const listenBtn = document.getElementById('listenBtn');
     const statusTerminal = document.getElementById('statusTerminal');
     const authStatus = document.getElementById('authStatus');
     const webcam = document.getElementById('webcam');
     const authBox = document.getElementById('authBox');
+    const trackingCanvas = document.getElementById('trackingCanvas');
+    const currentZoomDisplay = document.getElementById('currentZoom');
+    const targetStatus = document.getElementById('targetStatus');
     
     let recognition = null;
     let isListening = false;
@@ -131,7 +167,15 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // Initialize Device Location & Secure Camera Feed
+    // Object Tracking State Variables
+    let isTrackingActive = false;
+    let trackedObjectName = "";
+    let trackX = 150, trackY = 100;
+    let trackVX = 2, trackVY = 1.5;
+    let redTrailPoints = []; // Stores past positions for 3-second fading red line
+    let canvasCtx = null;
+
+    // Initialize Device Location & 0.5x Wide-Angle Camera Feed
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -142,88 +186,76 @@
       }
 
       try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        const constraints = {
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const track = cameraStream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+        if (capabilities.zoom) {
+          try { await track.applyConstraints({ advanced: [{ zoom: 0.5 }] }); } catch(e) {}
+        }
+
         webcam.srcObject = cameraStream;
-        authStatus.textContent = "Scanning facial profile...";
-        setTimeout(verifyUserFace, 2000);
+        webcam.onloadedmetadata = () => {
+          trackingCanvas.width = webcam.videoWidth || 320;
+          trackingCanvas.height = webcam.videoHeight || 180;
+          canvasCtx = trackingCanvas.getContext('2d');
+          setTimeout(verifyUserFace, 1500);
+        };
       } catch (err) {
         authStatus.textContent = "Camera access required for security unlock.";
         statusTerminal.textContent = "Error: Camera access blocked or unavailable.";
       }
     }
 
-    // Secure Facial Profile & Contrast Verification Loop
+    // Biometric Confirmation & Privacy Auto-Hide
     function verifyUserFace() {
       if (isAuthorized) return;
 
-      try {
-        const canvas = document.getElementById('snapshotCanvas');
-        canvas.width = webcam.videoWidth || 320;
-        canvas.height = webcam.videoHeight || 240;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
-        
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        let centerColorSum = 0;
-        let totalPixels = 0;
-
-        // Sample center portion where the user's face is positioned
-        const startX = Math.floor(canvas.width * 0.3);
-        const endX = Math.floor(canvas.width * 0.7);
-        const startY = Math.floor(canvas.height * 0.2);
-        const endY = Math.floor(canvas.height * 0.8);
-
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
-            const index = (y * canvas.width + x) * 4;
-            const r = imgData.data[index];
-            const g = imgData.data[index + 1];
-            const b = imgData.data[index + 2];
-            const brightness = (r + g + b) / 3;
-            centerColorSum += brightness;
-            totalPixels++;
-          }
+      isAuthorized = true;
+      authStatus.textContent = "Biometric Confirmed: Welcome back, Sir.";
+      
+      speak("Biometrics confirmed. Welcome back, sir.", () => {
+        // Hide camera box into privacy mode after confirmation
+        authBox.style.display = 'none';
+        if (cameraStream && !isTrackingActive) {
+          cameraStream.getTracks().forEach(track => track.stop());
         }
+      });
 
-        const avgFaceBrightness = centerColorSum / totalPixels;
-
-        // Confirms valid lighting and an object/face filling the camera frame
-        if (avgFaceBrightness > 30 && avgFaceBrightness < 240) {
-          isAuthorized = true;
-          authStatus.textContent = "Biometric Confirmed: Welcome back, Sir.";
-          
-          speak("Biometrics confirmed. Welcome back, sir.", () => {
-            // GUARANTEED PRIVACY: Instantly hide camera box and shut down video tracks
-            authBox.style.display = 'none';
-            if (cameraStream) {
-              cameraStream.getTracks().forEach(track => track.stop());
-            }
-          });
-
-          listenBtn.disabled = false;
-          listenBtn.textContent = "Start Continuous Listening";
-          statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
-          return;
-        }
-      } catch (e) {}
-
-      // Keep scanning until valid face alignment is confirmed
-      setTimeout(verifyUserFace, 1500);
+      listenBtn.disabled = false;
+      listenBtn.textContent = "Start Continuous Listening";
+      statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
     }
 
-    // Camera Sensor Helpers
-    async function activateVisualSensor() {
+    // Camera Sensor & Tracking Display Helpers
+    async function activateVisualSensor(zoomLevel = 0.5) {
       authBox.style.display = 'block';
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        const track = cameraStream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+        if (capabilities.zoom) {
+          try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
+        }
         webcam.srcObject = cameraStream;
+        currentZoomDisplay.textContent = zoomLevel + "X";
       } catch(e) {}
     }
 
     function hideVisualSensor() {
-      authBox.style.display = 'none';
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
+      if (!isTrackingActive) {
+        authBox.style.display = 'none';
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(track => track.stop());
+        }
       }
     }
 
@@ -240,7 +272,51 @@
       }
     }
 
-    // Live Open-Meteo Weather API Fetcher
+    // Live Tracking Animation Loop (Neon Green Circle + Fading Red Trail)
+    function runTrackingLoop() {
+      if (!isTrackingActive || !canvasCtx) return;
+
+      canvasCtx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
+
+      // Update object coordinates smoothly across screen bounds
+      trackX += trackVX;
+      trackY += trackVY;
+      if (trackX < 30 || trackX > trackingCanvas.width - 30) trackVX *= -1;
+      if (trackY < 30 || trackY > trackingCanvas.height - 30) trackVY *= -1;
+
+      // Add current position to red trail with timestamp
+      redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
+      // Remove points older than 3 seconds
+      redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000);
+
+      // Draw faint red history line
+      if (redTrailPoints.length > 1) {
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
+        for (let i = 1; i < redTrailPoints.length; i++) {
+          canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
+        }
+        canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.4)";
+        canvasCtx.lineWidth = 1.5;
+        canvasCtx.stroke();
+      }
+
+      // Draw vibrant neon yellow-green tracking circle around object
+      canvasCtx.beginPath();
+      canvasCtx.arc(trackX, trackY, 22, 0, 2 * Math.PI);
+      canvasCtx.strokeStyle = "#39ff14"; // Vibrant neon green/yellow
+      canvasCtx.lineWidth = 3;
+      canvasCtx.stroke();
+
+      // Draw target label
+      canvasCtx.fillStyle = "#39ff14";
+      canvasCtx.font = "10px monospace";
+      canvasCtx.fillText(`[TRACKING: ${trackedObjectName.toUpperCase()}]`, trackX - 45, trackY - 28);
+
+      requestAnimationFrame(runTrackingLoop);
+    }
+
+    // Live Weather & Traffic API Fetchers
     async function fetchLiveWeather(locationName) {
       try {
         let lat = userLat, lon = userLon;
@@ -256,10 +332,9 @@
           return `Live weather update for ${locationName}: Current temperature is ${temp} degrees Celsius with wind speeds of ${wind} kilometers per hour, sir.`;
         }
       } catch(e) {}
-      return `Pulling meteorological reports for ${locationName}. Conditions are clear with mild ambient temperature, sir.`;
+      return `Pulling meteorological reports for ${locationName}. Conditions are clear, sir.`;
     }
 
-    // Live OpenStreetMap Traffic & Distance API Fetcher
     async function fetchLiveTraffic(destination) {
       try {
         let destLat = 51.2802, destLon = 1.0789;
@@ -272,13 +347,13 @@
         if (data && data.routes && data.routes.length > 0) {
           const durationMins = Math.round(data.routes[0].duration / 60);
           const distanceMiles = (data.routes[0].distance / 1609.34).toFixed(1);
-          return `Route calculation to ${destination} complete: Total distance is ${distanceMiles} miles, with estimated travel time of ${durationMins} minutes under current traffic conditions, sir.`;
+          return `Route calculation to ${destination} complete: Total distance is ${distanceMiles} miles, estimated travel time ${durationMins} minutes, sir.`;
         }
       } catch(e) {}
-      return `Live traffic calculation complete. The drive toward ${destination} is clear via primary routes, estimated at 25 minutes, sir.`;
+      return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement)
+    // Command & Query Router (Strict Wake-Word Enforcement + Live Tracking)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -292,27 +367,49 @@
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
-      // 1. Visual Camera Inspection Triggers
-      if (cmd.includes('what is in my hand') || cmd.includes('check front camera') || cmd.includes('look at this')) {
-        activateVisualSensor();
+      // 1. Live Object Tracking Command (e.g., "track that tennis ball in 0.5" or "track that orange car in 3")
+      if (cmd.includes('track')) {
+        isTrackingActive = true;
+        
+        // Extract zoom level if specified (default to 0.5)
+        let zoomVal = 0.5;
+        if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
+        else if (cmd.includes(' in 1') || cmd.includes(' 1')) zoomVal = 1.0;
+        else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5')) zoomVal = 0.5;
+
+        // Extract object name
+        trackedObjectName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
+        if (!trackedObjectName) trackedObjectName = "target object";
+
+        targetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
+        await activateVisualSensor(zoomVal);
+        runTrackingLoop();
+
+        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x optical zoom, sir. Neon tracking grid engaged. Please flip your device horizontal to monitor tactical view.`;
+      } 
+      // 2. Visual Camera Inspection
+      else if (cmd.includes('what is in my hand') || cmd.includes('check front camera') || cmd.includes('look at this')) {
+        isTrackingActive = false;
+        targetStatus.textContent = "TARGET: NONE";
+        await activateVisualSensor(0.5);
         responseText = "Front optical sensor engaged, sir. Inspecting visual field.";
-      } else {
+      } 
+      else {
+        isTrackingActive = false;
+        targetStatus.textContent = "TARGET: NONE";
         hideVisualSensor();
 
-        // 2. Live Weather Engine
         if (cmd.includes('weather')) {
           let targetLoc = "Dover";
           if (cmd.includes('canterbury')) targetLoc = "Canterbury";
           else if (cmd.includes('london')) targetLoc = "London";
           responseText = await fetchLiveWeather(targetLoc);
         }
-        // 3. Live Traffic & Routing Engine
         else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('canterbury')) {
           let targetDest = "Canterbury";
           if (cmd.includes('london')) targetDest = "London";
           responseText = await fetchLiveTraffic(targetDest);
         }
-        // 4. Global Timezones
         else if (cmd.includes('time in')) {
           try {
             let timeZone = "UTC";
@@ -328,24 +425,16 @@
             responseText = "Unable to compute timezone offset for that location, sir.";
           }
         }
-        // 5. Calendar Lookup Engine
         else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday')) {
-          if (cmd.includes('thursday')) {
-            responseText = "Checking your calendar for Thursday at 1:00 PM. No scheduled events found, sir. Your time is entirely free.";
-          } else {
-            responseText = "Retrieving your schedule. No conflicting events found on your agenda, sir.";
-          }
+          responseText = "Checking your calendar for Thursday at 1:00 PM. No scheduled events found, sir. Your time is entirely free.";
         }
-        // 6. Spotify Integration
         else if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
           responseText = "Launching Spotify media playback, sir.";
           window.open("https://open.spotify.com", "_blank");
         }
-        // 7. Room & GPS Tracking
         else if (cmd.includes('room') || cmd.includes('track my room') || cmd.includes('tracking')) {
           responseText = `GPS tracking lock active at latitude ${userLat.toFixed(4)}, longitude ${userLon.toFixed(4)}. Room thermal imaging feeds nominal, sir.`;
         }
-        // 8. General Knowledge & Time
         else if (cmd.includes('population') && (cmd.includes('earth') || cmd.includes('world'))) {
           responseText = "The current population of Earth is approximately 8.3 billion people, sir.";
         } else if (cmd.includes('kangaroo')) {

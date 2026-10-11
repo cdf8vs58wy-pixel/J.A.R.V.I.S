@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. HUD</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #00ffcc;
+            font-family: monospace;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { font-size: 24px; letter-spacing: 2px; text-shadow: 0 0 10px #00ffcc; }
+        .hud-container {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 30px auto;
+        }
+        .ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 3px dashed rgba(0, 255, 204, 0.4);
+            border-radius: 50%;
+            animation: spin 10s linear infinite;
+        }
+        .inner-ring {
+            position: absolute;
+            top: 20px; left: 20px; right: 20px; bottom: 20px;
+            border: 2px solid #00ffcc;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin-reverse 6s linear infinite;
+        }
+        .hud-image {
+            position: absolute;
+            top: 40px; left: 40px; right: 40px; bottom: 40px;
+            background-image: url('image.png');
+            background-size: cover;
+            background-position: center;
+            border-radius: 50%;
+            box-shadow: 0 0 20px #00ffcc;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
+        #console {
+            background: rgba(0, 20, 20, 0.8);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 400px;
+            margin: 20px auto;
+            text-align: left;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        button {
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 0 15px #00ffcc;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>J.A.R.V.I.S. WAKE WORD ACTIVE</h1>
+    
+    <div class="hud-container">
+        <div class="ring"></div>
+        <div class="inner-ring"></div>
+        <div class="hud-image"></div>
+    </div>
+
+    <button id="mic-btn" onclick="toggleListening()">🎙️ Start Continuous Listening</button>
+
+    <div id="console">System online, sir. Tap start once, then say "Jarvis" followed by your command.</div>
+
+    <script>
+        const API_KEY = "AQ.Ab8RN6LoNvRpnHm1Zrf1ipoTicvrC2rYfBSUyY6YhsBUr-HhGA";
+        const consoleBox = document.getElementById("console");
+        const micBtn = document.getElementById("mic-btn");
+        let isListening = false;
+        let recognition = null;
+
+        function logMessage(sender, text) {
+            consoleBox.innerHTML += `<br><b>${sender}:</b> ${text}`;
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 0.9;
+                // Automatically restart listening after Jarvis finishes talking
+                utterance.onend = () => {
+                    if (isListening && recognition) {
+                        try { recognition.start(); } catch(e) {}
+                    }
+                };
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+          

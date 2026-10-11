@@ -306,6 +306,8 @@
     let userFaceSignature = null; 
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
+    let speechBuffer = "";
+    let speechTimeout = null;
 
     /* -------------------------------------------------------------------------- */
     /* TACTICAL & TARGET TRACKING SUBSYSTEM VARIABLES                             */
@@ -435,7 +437,6 @@
         isAuthorized = true;
         userFaceSignature = { r: avgR, g: avgG, b: avgB }; 
         
-        // Hide the camera viewport container completely once identified!
         authBox.style.display = 'none';
 
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nFace locked and remembered. Welcome back, sir.";
@@ -527,6 +528,9 @@
       tacticalOverlay.style.display = 'none';
       tacticalVideo.style.filter = "none";
       clearTimeout(trackingTimeout);
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
     }
 
     function runTrackingLoop(timestamp) {
@@ -732,6 +736,18 @@
       }
 
       let responseText = "";
+
+      // Handle command to disengage tracking/thermal mode
+      if (cmd.includes('disengage tracking') || cmd.includes('stop tracking') || cmd.includes('exit tracking') || cmd.includes('stop scanning')) {
+        stopTrackingMode();
+        responseText = "Tracking disengaged. Returning to standard interface, sir.";
+        statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
+        speak(responseText);
+        if (isListening && recognition && isAuthorized) {
+          try { recognition.start(); } catch(e) {}
+        }
+        return;
+      }
       
       if (cmd.includes('what am i doing') || cmd.includes('schedule on') || cmd.includes('plans for')) {
         let eventSummary = "Your time is all yours, sir, but you do have football training coming up on Thursday at 7:30 PM to 8:30 PM";
@@ -835,8 +851,8 @@
         if (cmd.includes('0.5')) zoomVal = 0.5;
         else if (cmd.includes('3')) zoomVal = 3.0;
         else if (cmd.includes('1')) zoomVal = 1.0;
-        startTrackingMode("Room Thermal Scan", zoomVal, true, 30);
-        responseText = `Engaging thermal room tracking for 30 seconds at ${zoomVal}x zoom, sir.`;
+        startTrackingMode("Room Thermal Scan", zoomVal, true, 0);
+        responseText = `Engaging thermal room tracking at ${zoomVal}x zoom, sir. Say Jarvis disengage tracking when done.`;
       }
       else if (cmd.includes('track')) {
         let zoomVal = 0.5;
@@ -845,7 +861,7 @@
         let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
         if (!objName) objName = "target object";
         startTrackingMode(objName, zoomVal, false, 0);
-        responseText = `Locking onto ${objName} at ${zoomVal}x zoom, sir.`;
+        responseText = `Locking onto ${objName} at ${zoomVal}x zoom, sir. Say Jarvis disengage tracking when done.`;
       }
       else if (cmd.includes('time')) {
         const now = new Date();
@@ -863,7 +879,7 @@
     }
 
     /* ========================================================================== */
-    /* SPEECH RECOGNITION (IMMEDIATE FINAL PROCESSING FIX)                        */
+    /* ROBUST CONTINUOUS SPEECH RECOGNITION (FIXED SILENCE & CUT-OFF BUG)         */
     /* ========================================================================== */
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -882,26 +898,25 @@
       };
 
       rec.onresult = (event) => {
-        let finalTranscript = "";
-        let interimTranscript = "";
-
+        let currentTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
+          currentTranscript += event.results[i][0].transcript;
         }
 
-        if (interimTranscript) {
-          statusTerminal.textContent = `Hearing: "${interimTranscript}"`;
-        }
+        if (currentTranscript.trim()) {
+          speechBuffer = currentTranscript.trim();
+          statusTerminal.textContent = `Hearing: "${speechBuffer}"`;
 
-        if (finalTranscript.trim()) {
-          const spokenText = finalTranscript.trim();
-          statusTerminal.textContent = `Hearing: "${spokenText}"`;
-          try { rec.stop(); } catch(e) {}
-          processJarvisCommand(spokenText);
+          // Clear previous timer so Jarvis waits patiently for you to finish speaking
+          clearTimeout(speechTimeout);
+          
+          // Wait 4 seconds after your last spoken word before processing the command
+          speechTimeout = setTimeout(() => {
+            const finalQuery = speechBuffer;
+            speechBuffer = "";
+            try { rec.stop(); } catch(e) {}
+            processJarvisCommand(finalQuery);
+          }, 4000);
         }
       };
 

@@ -87,7 +87,7 @@
   <button id="listenBtn">Start Continuous Listening</button>
 
   <div class="terminal" id="statusTerminal">
-    System online, sir. Tap start once, then say "Jarvis" followed by your command.
+    System online, sir. Tap start once, then say your command.
   </div>
 
   <script>
@@ -96,25 +96,43 @@
     let recognition = null;
     let isListening = false;
 
-    // Comprehensive command router supporting all system modules
+    // Text-to-Speech function for J.A.R.V.I.S. voice replies
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 0.9;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    // Command router covering all your system features
     function processJarvisCommand(command) {
       const cmd = command.toLowerCase();
+      let responseText = "";
       
       if (cmd.includes('room') || cmd.includes('track my room')) {
-        statusTerminal.textContent = "Executing: Initializing room surveillance and thermal imaging feed...";
+        responseText = "Initializing room surveillance and thermal imaging feed, sir.";
       } else if (cmd.includes('camera') || cmd.includes('feed')) {
-        statusTerminal.textContent = "Executing: Accessing security camera array...";
+        responseText = "Accessing security camera array now.";
       } else if (cmd.includes('weather')) {
-        statusTerminal.textContent = "Executing: Pulling live meteorological data for Dover...";
+        responseText = "Pulling live meteorological data for your location.";
       } else if (cmd.includes('spotify') || cmd.includes('music')) {
-        statusTerminal.textContent = "Executing: Connecting to Spotify media playback...";
+        responseText = "Connecting to Spotify media playback.";
       } else if (cmd.includes('calendar')) {
-        statusTerminal.textContent = "Executing: Retrieving schedule and calendar entries...";
+        responseText = "Retrieving your schedule and calendar entries.";
       } else if (cmd.includes('tracking') || cmd.includes('live track')) {
-        statusTerminal.textContent = "Executing: Activating live GPS tracking coordinates...";
+        responseText = "Activating live GPS tracking coordinates.";
+      } else if (cmd.includes('time')) {
+        const now = new Date();
+        responseText = `The time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
       } else {
-        statusTerminal.textContent = `Query processed: "${command}". All systems nominal, sir.`;
+        responseText = `Query processed: "${command}". All systems nominal, sir.`;
       }
+
+      statusTerminal.textContent = `Command: "${command}"\nResponse: ${responseText}`;
+      speak(responseText);
     }
 
     function initSpeechRecognition() {
@@ -136,6 +154,7 @@
         listenBtn.style.background = "#00ffcc";
         listenBtn.style.color = "#000";
         statusTerminal.textContent = "System active. Listening for your command...";
+        speak("Ready when you are, sir");
       };
 
       rec.onresult = (event) => {

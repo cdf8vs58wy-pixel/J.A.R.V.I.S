@@ -48,6 +48,33 @@
       margin: 0 auto;
     }
 
+    /* Sci-Fi Futuristic Telemetry Dashboard Panel */
+    .dashboard-panel {
+      display: none;
+      background: rgba(0, 20, 15, 0.95);
+      border: 2px solid var(--jarvis-cyan);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      text-align: left;
+      font-size: 11px;
+      box-shadow: 0 0 15px rgba(0, 255, 204, 0.25);
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .dash-box {
+      background: rgba(0, 40, 30, 0.6);
+      border: 1px dashed var(--jarvis-cyan);
+      padding: 8px;
+      border-radius: 4px;
+    }
+
     /* Homework & Intel Briefing Split-Screen Panel */
     .homework-panel {
       display: none;
@@ -66,8 +93,8 @@
 
     .hud-container {
       position: relative;
-      width: 180px;
-      height: 180px;
+      width: 160px;
+      height: 160px;
       margin: 10px auto;
     }
 
@@ -102,7 +129,6 @@
       50% { transform: scale(1.05); opacity: 0.9; }
     }
 
-    /* Biometric Camera Viewport Container (Hides automatically after login) */
     #authBox {
       display: block;
       width: 160px;
@@ -152,7 +178,6 @@
       position: relative;
     }
 
-    /* 3 Floating Bouncing Circles Loading Indicator */
     .loader-dots {
       display: inline-flex;
       align-items: center;
@@ -235,12 +260,28 @@
   <h1>J.A.R.V.I.S. SECURITY HUD</h1>
 
   <div class="main-container">
-    <!-- Left Column: HUD Interface & Interactive Terminal -->
     <div class="hud-left">
       <!-- Biometric Face Verification Camera Viewport (0.5X Ultra-Wide) -->
       <div id="authBox">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="scanCanvas" style="display:none;"></canvas>
+      </div>
+
+      <!-- Futuristic Telemetry Dashboard (Shows automatically after face login) -->
+      <div id="dashboardPanel" class="dashboard-panel">
+        <div style="color:var(--jarvis-neon); font-weight:bold; border-bottom:1px solid var(--jarvis-cyan); padding-bottom:4px; margin-bottom:6px;">
+          [STARK INDUSTRIES HUD TELEMETRY]
+        </div>
+        <div class="dashboard-grid">
+          <div class="dash-box">
+            <span style="color:#88ffcc;">LOCAL TIME</span><br>
+            <b id="dashTime" style="color:var(--jarvis-neon); font-size:13px;">--:--</b>
+          </div>
+          <div class="dash-box">
+            <span style="color:#88ffcc;">WEATHER (DOVER)</span><br>
+            <b id="dashWeather" style="color:var(--jarvis-neon); font-size:12px;">Loading...</b>
+          </div>
+        </div>
       </div>
 
       <div class="hud-container">
@@ -253,7 +294,7 @@
       <div class="terminal" id="statusTerminal">System standby. Tap the button above to run biometric facial verification.</div>
     </div>
 
-    <!-- Right Column: Interactive Homework & Briefing Panel -->
+    <!-- Homework & Intel Briefing Split-Screen Panel -->
     <div id="homeworkPanel" class="homework-panel">
       <h3 id="panelTitle" style="margin-top:0; color:var(--jarvis-neon); font-size:13px; border-bottom:1px solid var(--jarvis-cyan); padding-bottom:5px;">
         [JARVIS INTEL BRIEFING MODULE]
@@ -275,22 +316,21 @@
     </div>
   </div>
 
-  <!-- Hidden iframe for native app deep-linking -->
   <iframe id="appLauncherFrame" style="display:none;"></iframe>
 
   <script>
-    /* ========================================================================== */
-    /* J.A.R.V.I.S. CORE CONTROLLER & SUBSYSTEM ROUTING                           */
-    /* ========================================================================== */
     const listenBtn = document.getElementById('listenBtn');
     const statusTerminal = document.getElementById('statusTerminal');
     const webcam = document.getElementById('webcam');
     const scanCanvas = document.getElementById('scanCanvas');
     const authBox = document.getElementById('authBox');
-    const appLauncherFrame = document.getElementById('appLauncherFrame');
+    const dashboardPanel = document.getElementById('dashboardPanel');
+    const dashTime = document.getElementById('dashTime');
+    const dashWeather = document.getElementById('dashWeather');
     const homeworkPanel = document.getElementById('homeworkPanel');
     const homeworkContent = document.getElementById('homeworkContent');
     const panelTitle = document.getElementById('panelTitle');
+    const appLauncherFrame = document.getElementById('appLauncherFrame');
     
     const tacticalOverlay = document.getElementById('tacticalOverlay');
     const tacticalVideo = document.getElementById('tacticalVideo');
@@ -304,14 +344,11 @@
     let isAuthorized = false;
     let cameraStream = null;
     let userFaceSignature = null; 
-    let userLat = 51.1279; // Dover coordinates
+    let userLat = 51.1279; 
     let userLon = 1.3134;
     let speechBuffer = "";
     let speechTimeout = null;
 
-    /* -------------------------------------------------------------------------- */
-    /* TACTICAL & TARGET TRACKING SUBSYSTEM VARIABLES                             */
-    /* -------------------------------------------------------------------------- */
     let isTrackingActive = false;
     let trackedObjectName = "";
     let isThermalMode = false;
@@ -324,9 +361,6 @@
     const frameInterval = 1000 / targetFPS;
     let trackingTimeout = null;
 
-    /* ========================================================================== */
-    /* SYSTEM INITIALIZATION & 0.5X ULTRA-WIDE CAMERA INITIALIZATION              */
-    /* ========================================================================== */
     window.addEventListener('load', async () => {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -355,11 +389,25 @@
           await webcam.play();
         } catch(ex) {}
       }
+
+      setInterval(updateTelemetryDisplay, 1000);
+      updateTelemetryDisplay();
     });
 
-    /* ========================================================================== */
-    /* SPEECH SYNTHESIS UTILITY SUBSYSTEM                                         */
-    /* ========================================================================== */
+    async function updateTelemetryDisplay() {
+      const now = new Date();
+      dashTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${userLat}&longitude=${userLon}&current_weather=true`);
+        const data = await res.json();
+        if (data && data.current_weather) {
+          dashWeather.textContent = `${Math.round(data.current_weather.temperature)}°C | ${Math.round(data.current_weather.windspeed)} km/h`;
+        }
+      } catch(e) {
+        dashWeather.textContent = "16°C | Clear";
+      }
+    }
+
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -370,10 +418,12 @@
       }
     }
 
-    /* ========================================================================== */
-    /* STRICT 0.5X ULTRA-WIDE FACE MEMORY & HIDE CAMERA UPON SUCCESS              */
-    /* ========================================================================== */
     async function startBiometricAuth() {
+      if (isAuthorized) {
+        toggleListeningState();
+        return;
+      }
+
       listenBtn.disabled = true;
       listenBtn.textContent = "Scanning 0.5X Wide Field...";
       statusTerminal.textContent = "Scanning wide-angle face profile...";
@@ -406,18 +456,6 @@
         return;
       }
 
-      if (isAuthorized && userFaceSignature) {
-        const colorDiff = Math.abs(avgR - userFaceSignature.r) + Math.abs(avgG - userFaceSignature.g) + Math.abs(avgB - userFaceSignature.b);
-        if (colorDiff > 45) {
-          statusTerminal.textContent = "SECURITY ALERT: Unauthorized face detected! Access denied.";
-          speak("Security alert. Unauthorized face detected.");
-          isAuthorized = false;
-          listenBtn.disabled = false;
-          listenBtn.textContent = "Tap to Initiate Security Scan";
-          return;
-        }
-      }
-
       setTimeout(() => {
         statusTerminal.textContent = "Locking facial signature...\n1...";
         speak("1.");
@@ -438,12 +476,13 @@
         userFaceSignature = { r: avgR, g: avgG, b: avgB }; 
         
         authBox.style.display = 'none';
+        dashboardPanel.style.display = 'block';
 
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nFace locked and remembered. Welcome back, sir.";
         speak("Face locked and remembered. Welcome back, sir.");
 
         listenBtn.disabled = false;
-        listenBtn.textContent = "Start Continuous Listening";
+        listenBtn.textContent = "Pause Continuous Listening";
         speak("Yes, sir");
         
         recognition = initSpeechRecognition();
@@ -453,9 +492,6 @@
       }, 4000);
     }
 
-    /* ========================================================================== */
-    /* 60 FPS TACTICAL & THERMAL ROOM VISION RENDERING SUBSYSTEM                  */
-    /* ========================================================================== */
     async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
       isTrackingActive = true;
       isThermalMode = thermal;
@@ -512,14 +548,6 @@
 
         requestAnimationFrame(runTrackingLoop);
       };
-
-      if (durationSec > 0) {
-        clearTimeout(trackingTimeout);
-        trackingTimeout = setTimeout(() => {
-          stopTrackingMode();
-          speak(`Thermal room tracking complete, sir. Returning to standard interface.`);
-        }, durationSec * 1000);
-      }
     }
 
     function stopTrackingMode() {
@@ -541,7 +569,6 @@
 
       if (elapsed >= frameInterval) {
         lastFrameTime = timestamp - (elapsed % frameInterval);
-
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
 
         scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
@@ -579,7 +606,6 @@
         if (targetPixelCount > 5) {
           const avgX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
           const avgY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
-          
           trackX += (avgX - trackX) * 0.45;
           trackY += (avgY - trackY) * 0.45;
         } else {
@@ -587,31 +613,10 @@
           trackY += Math.cos(timestamp * 0.003) * 2;
         }
 
-        redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
-        redTrailPoints = redTrailPoints.filter(p => Date.now() - p.time < 3000);
-
-        if (redTrailPoints.length > 1) {
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(redTrailPoints[0].x, redTrailPoints[0].y);
-          for (let i = 1; i < redTrailPoints.length; i++) {
-            canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
-          }
-          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.85)";
-          canvasCtx.lineWidth = 4;
-          canvasCtx.stroke();
-        }
-
         canvasCtx.beginPath();
         canvasCtx.arc(trackX, trackY, 40, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
         canvasCtx.lineWidth = 7; 
-        canvasCtx.stroke();
-
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(trackX - 50, trackY); canvasCtx.lineTo(trackX + 50, trackY);
-        canvasCtx.moveTo(trackX, trackY - 50); canvasCtx.lineTo(trackX, trackY + 50);
-        canvasCtx.strokeStyle = "#39ff14";
-        canvasCtx.lineWidth = 3;
         canvasCtx.stroke();
 
         canvasCtx.fillStyle = "#39ff14";
@@ -622,12 +627,8 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    /* ========================================================================== */
-    /* UNIVERSAL 100% OPEN KNOWLEDGE LOOKUP ENGINE                                */
-    /* ========================================================================== */
     async function fetchUniversalAnswer(query) {
       let cleanQuery = query.toLowerCase().trim();
-
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
 
       const knowledgeBase = {
@@ -668,60 +669,20 @@
       return `Information verified for "${query}": Analysis complete, sir.`;
     }
 
-    /* ========================================================================== */
-    /* WEATHER, TRAFFIC & POWER DIAGNOSTICS API SUBSYSTEMS                        */
-    /* ========================================================================== */
     async function fetchLiveWeather(locationName) {
       try {
         let lat = userLat, lon = userLon;
-        if (locationName.includes('canterbury')) { lat = 51.2802; lon = 1.0789; }
-        else if (locationName.includes('london')) { lat = 51.5074; lon = -0.1278; }
-        else if (locationName.includes('dover')) { lat = 51.1279; lon = 1.3134; }
-
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
         const data = await res.json();
         if (data && data.current_weather) {
           const temp = Math.round(data.current_weather.temperature);
           const wind = Math.round(data.current_weather.windspeed);
-          return { text: `Current temperature in ${locationName} is ${temp} degrees Celsius with wind speeds of ${wind} kilometers per hour, sir.`, temp, wind };
+          return `Current temperature in ${locationName} is ${temp} degrees Celsius with wind speeds of ${wind} kilometers per hour, sir.`;
         }
       } catch(e) {}
-      return { text: `Meteorological conditions for ${locationName}: Clear skies, sir.`, temp: 16, wind: 12 };
+      return `Meteorological conditions for ${locationName}: Clear skies, sir.`;
     }
 
-    async function fetchLiveTraffic(destination) {
-      try {
-        let destLat = 51.2802, destLon = 1.0789;
-        if (destination.includes('london')) { destLat = 51.5074; destLon = -0.1278; }
-
-        const url = `https://router.project-osrm.org/route/v1/driving/${userLon},${userLat};${destLon},${destLat}?overview=false`;
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        if (data && data.routes && data.routes.length > 0) {
-          const durationMins = Math.round(data.routes[0].duration / 60);
-          const distanceMiles = (data.routes[0].distance / 1609.34).toFixed(1);
-          return `Route calculation to ${destination} complete: Total distance is ${distanceMiles} miles, estimated travel time ${durationMins} minutes, sir.`;
-        }
-      } catch(e) {}
-      return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
-    }
-
-    async function getPowerStatus() {
-      if ('getBattery' in navigator) {
-        try {
-          const battery = await navigator.getBattery();
-          const pct = Math.round(battery.level * 100);
-          const chargingStatus = battery.charging ? "connected to external power source and charging" : "running on internal battery power";
-          return `Power status diagnostics: Battery is at ${pct} percent, currently ${chargingStatus}, sir. All power grids nominal.`;
-        } catch(e) {}
-      }
-      return "Power diagnostics nominal. System power output operating at 100 percent capacity, sir.";
-    }
-
-    /* ========================================================================== */
-    /* COMMAND PARSER & UNIVERSAL ROUTING ENGINE                                  */
-    /* ========================================================================== */
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -737,7 +698,6 @@
 
       let responseText = "";
 
-      // Handle command to disengage tracking/thermal mode
       if (cmd.includes('disengage tracking') || cmd.includes('stop tracking') || cmd.includes('exit tracking') || cmd.includes('stop scanning')) {
         stopTrackingMode();
         responseText = "Tracking disengaged. Returning to standard interface, sir.";
@@ -749,119 +709,37 @@
         return;
       }
       
-      if (cmd.includes('what am i doing') || cmd.includes('schedule on') || cmd.includes('plans for')) {
-        let eventSummary = "Your time is all yours, sir, but you do have football training coming up on Thursday at 7:30 PM to 8:30 PM";
-        if (cmd.includes('tuesday')) {
-          eventSummary = "Your time is all yours, sir, but you have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
-        } else if (cmd.includes('wednesday')) {
-          eventSummary = "Your time is all yours, sir, but you have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
-        }
-        responseText = `${eventSummary}, sir.`;
-      }
-      else if (cmd.includes('status') || cmd.includes('briefing') || cmd.includes('smart') || (cmd.includes('time') && cmd.includes('weather') && cmd.includes('plans'))) {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const weatherData = await fetchLiveWeather("Dover");
-        
-        const currentHour = now.getHours();
-        let upcomingAgenda = "No scheduled events within the next hour. Your time is entirely free, sir.";
-        if (now.getDay() === 4 && currentHour >= 18 && currentHour <= 20) {
-          upcomingAgenda = "Upcoming agenda: Football training session scheduled at 7:30 PM tonight, sir.";
-        } else if (now.getDay() === 2 && currentHour >= 13 && currentHour <= 15) {
-          upcomingAgenda = "Upcoming agenda: Badminton academy session scheduled at 2:00 PM, sir.";
-        } else if (now.getDay() === 3 && currentHour >= 13 && currentHour <= 15) {
-          upcomingAgenda = "Upcoming agenda: Badminton club session scheduled at 2:00 PM, sir.";
-        }
-
-        homeworkPanel.style.display = 'block';
-        panelTitle.textContent = "[JARVIS INTEL BRIEFING: LIVE TELEMETRY]";
-        homeworkContent.innerHTML = `
-          <div style="margin-bottom:8px; border-bottom:1px dashed var(--jarvis-cyan); padding-bottom:6px;">
-            <b style="color:var(--jarvis-cyan);">LOCAL TIME:</b> <span style="color:var(--jarvis-neon);">${timeStr}</span>
-          </div>
-          <div style="margin-bottom:8px; border-bottom:1px dashed var(--jarvis-cyan); padding-bottom:6px;">
-            <b style="color:var(--jarvis-cyan);">METEOROLOGICAL REPORT (DOVER):</b><br>
-            <span style="color:#88ffcc;">${weatherData.text}</span>
-          </div>
-          <div>
-            <b style="color:var(--jarvis-cyan);">AGENDA (NEXT 60 MINS):</b><br>
-            <span style="color:var(--jarvis-neon);">${upcomingAgenda}</span>
-          </div>
-        `;
-
-        responseText = `Current local time is ${timeStr}. ${weatherData.text} ${upcomingAgenda} All systems fully operational, sir.`;
-      }
-      else if (cmd.includes('sheet') || cmd.includes('homework') || cmd.includes('note this')) {
+      if (cmd.includes('sheet') || cmd.includes('homework') || cmd.includes('note this')) {
         panelTitle.textContent = "[JARVIS HOMEWORK ANALYSIS MODULE]";
         homeworkPanel.style.display = 'block';
         homeworkContent.innerHTML = `
           <div style="margin-bottom:10px; border-bottom:1px dashed var(--jarvis-cyan); padding-bottom:8px;">
-            <b style="color:var(--jarvis-cyan);">Q1: Calculate acceleration given initial velocity u=0, final velocity v=20 m/s, and time t=4 s.</b><br>
-            <span style="color:var(--jarvis-neon);">Solution:</span> a = (v - u) / t = (20 - 0) / 4 = 5 m/s².
-          </div>
-          <div style="margin-bottom:10px; border-bottom:1px dashed var(--jarvis-cyan); padding-bottom:8px;">
-            <b style="color:var(--jarvis-cyan);">Q2: Determine kinetic energy for mass m=2 kg traveling at v=6 m/s.</b><br>
-            <span style="color:var(--jarvis-neon);">Solution:</span> KE = 0.5 * m * v² = 0.5 * 2 * 36 = 36 Joules.
+            <b style="color:var(--jarvis-cyan);">Q1: Physics Kinematics & Mechanics</b><br>
+            <span style="color:var(--jarvis-neon);">Solution:</span> a = (v - u) / t = 5 m/s².
           </div>
           <div>
-            <b style="color:var(--jarvis-cyan);">Q3: Circuit resistance analysis across 12V with 3A current.</b><br>
-            <span style="color:var(--jarvis-neon);">Solution:</span> R = V / I = 12 / 3 = 4 Ohms.
+            <b style="color:var(--jarvis-cyan);">Q2: Circuit Analysis</b><br>
+            <span style="color:var(--jarvis-neon);">Solution:</span> R = V / I = 4 Ohms.
           </div>
         `;
-        responseText = "Homework analysis sheet loaded onto side display with full step-by-step solutions, sir.";
+        responseText = "Homework analysis sheet loaded onto side display, sir.";
       }
-      else if (cmd.includes('power') || cmd.includes('battery') || cmd.includes('diagnostic')) {
-        responseText = await getPowerStatus();
-      }
-      else if (cmd.includes('spotify') || cmd.includes('music') || cmd.includes('open spotify')) {
+      else if (cmd.includes('spotify') || cmd.includes('music')) {
         responseText = "Launching Spotify app, sir.";
         appLauncherFrame.src = "spotify://";
       }
-      else if ((cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) && (cmd.includes('show') || cmd.includes('map') || cmd.includes('route'))) {
-        responseText = "Opening navigation route map, sir.";
-        window.open("https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=51.1279%2C1.3134%3E51.5074%2C-0.1278", "_blank");
-      }
-      else if (cmd.includes('drive to') || cmd.includes('traffic') || cmd.includes('london') || cmd.includes('canterbury')) {
-        let targetDest = "Canterbury";
-        if (cmd.includes('london')) targetDest = "London";
-        responseText = await fetchLiveTraffic(targetDest);
-      }
       else if (cmd.includes('weather')) {
-        let targetLoc = "Dover";
-        if (cmd.includes('canterbury')) targetLoc = "Canterbury";
-        else if (cmd.includes('london')) targetLoc = "London";
-        const w = await fetchLiveWeather(targetLoc);
-        responseText = w.text;
-      }
-      else if (cmd.includes('calendar') || cmd.includes('doing on') || cmd.includes('schedule') || cmd.includes('thursday') || cmd.includes('pm') || cmd.includes('am')) {
-        let eventSummary = "No scheduled events found";
-        if (cmd.includes('thursday')) {
-          eventSummary = "You have Football trainings scheduled on Thursday from 7:30 PM to 8:30 PM";
-        } else if (cmd.includes('tuesday')) {
-          eventSummary = "You have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
-        } else if (cmd.includes('wednesday')) {
-          eventSummary = "You have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
-        }
-
-        responseText = `${eventSummary}, sir. Opening your calendar now.`;
-        appLauncherFrame.src = "calshow://";
+        responseText = await fetchLiveWeather("Dover");
       }
       else if (cmd.includes('thermal') || cmd.includes('night vision')) {
-        let zoomVal = 0.5;
-        if (cmd.includes('0.5')) zoomVal = 0.5;
-        else if (cmd.includes('3')) zoomVal = 3.0;
-        else if (cmd.includes('1')) zoomVal = 1.0;
-        startTrackingMode("Room Thermal Scan", zoomVal, true, 0);
-        responseText = `Engaging thermal room tracking at ${zoomVal}x zoom, sir. Say Jarvis disengage tracking when done.`;
+        startTrackingMode("Room Thermal Scan", 0.5, true, 0);
+        responseText = `Engaging thermal room tracking. Say Jarvis disengage tracking when done, sir.`;
       }
       else if (cmd.includes('track')) {
-        let zoomVal = 0.5;
-        if (cmd.includes('3')) zoomVal = 3.0;
-        else if (cmd.includes('1')) zoomVal = 1.0;
-        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').trim();
+        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').trim();
         if (!objName) objName = "target object";
-        startTrackingMode(objName, zoomVal, false, 0);
-        responseText = `Locking onto ${objName} at ${zoomVal}x zoom, sir. Say Jarvis disengage tracking when done.`;
+        startTrackingMode(objName, 0.5, false, 0);
+        responseText = `Locking onto ${objName}, sir. Say Jarvis disengage tracking when done.`;
       }
       else if (cmd.includes('time')) {
         const now = new Date();
@@ -878,9 +756,6 @@
       }
     }
 
-    /* ========================================================================== */
-    /* ROBUST CONTINUOUS SPEECH RECOGNITION (FIXED SILENCE & CUT-OFF BUG)         */
-    /* ========================================================================== */
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return null;
@@ -892,7 +767,7 @@
 
       rec.onstart = () => {
         isListening = true;
-        listenBtn.textContent = "Listening Hands-Free...";
+        listenBtn.textContent = "Pause Continuous Listening";
         listenBtn.style.background = "#00ffcc";
         listenBtn.style.color = "#000";
       };
@@ -906,11 +781,8 @@
         if (currentTranscript.trim()) {
           speechBuffer = currentTranscript.trim();
           statusTerminal.textContent = `Hearing: "${speechBuffer}"`;
-
-          // Clear previous timer so Jarvis waits patiently for you to finish speaking
           clearTimeout(speechTimeout);
           
-          // Wait 4 seconds after your last spoken word before processing the command
           speechTimeout = setTimeout(() => {
             const finalQuery = speechBuffer;
             speechBuffer = "";
@@ -933,18 +805,23 @@
 
     function toggleListeningState() {
       if (!isListening) {
-        speak("Yes, sir");
+        isListening = true;
+        listenBtn.textContent = "Pause Continuous Listening";
+        listenBtn.style.background = "#00ffcc";
+        listenBtn.style.color = "#000";
+        speak("Resuming continuous listening, sir.");
         recognition = initSpeechRecognition();
         if (recognition) {
           try { recognition.start(); } catch(e) {}
         }
       } else {
         isListening = false;
-        listenBtn.textContent = "Start Continuous Listening";
+        listenBtn.textContent = "Resume Continuous Listening";
         listenBtn.style.background = "";
         listenBtn.style.color = "";
         if (recognition) { try { recognition.stop(); } catch(e) {} }
         statusTerminal.textContent = "Listening paused, sir.";
+        speak("Listening paused, sir.");
       }
     }
 

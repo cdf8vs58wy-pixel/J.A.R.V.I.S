@@ -459,7 +459,9 @@
         const data = imgData.data;
 
         let targetXSum = 0, targetYSum = 0, targetPixelCount = 0;
-        const isTennisBall = trackedObjectName.toLowerCase().includes('tennis') || trackedObjectName.toLowerCase().includes('ball');
+        const queryObj = trackedObjectName.toLowerCase();
+        const isTennisBall = queryObj.includes('tennis') || queryObj.includes('ball');
+        const isBasketball = queryObj.includes('basket') || queryObj.includes('orange');
 
         for (let y = 2; y < scanCanvas.height - 2; y += 2) {
           for (let x = 2; x < scanCanvas.width - 2; x += 2) {
@@ -468,12 +470,13 @@
 
             let matchesTarget = false;
             if (isTennisBall) {
-              if (g > 85 && r > 60 && b < 110 && g >= r - 10) {
-                matchesTarget = true;
-              }
+              if (g > 85 && r > 60 && b < 110 && g >= r - 10) matchesTarget = true;
+            } else if (isBasketball) {
+              // Enhanced range for orange/brown basketballs
+              if (r > 100 && g > 45 && g < 140 && b < 90 && r > g) matchesTarget = true;
             } else {
               const brightness = (r + g + b) / 3;
-              if (brightness > 160 || brightness < 70) matchesTarget = true;
+              if (brightness > 150 || brightness < 70) matchesTarget = true;
             }
 
             if (matchesTarget) {
@@ -484,7 +487,7 @@
           }
         }
 
-        if (targetPixelCount > 6) {
+        if (targetPixelCount > 5) {
           const avgX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
           const avgY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
           
@@ -597,7 +600,17 @@
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
-      if (cmd.includes('status') || cmd.includes('briefing') || cmd.includes('smart') || (cmd.includes('time') && cmd.includes('weather') && cmd.includes('plans'))) {
+      // Smart Calendar Gap-Filler ("What am I doing Friday 6 PM?")
+      if (cmd.includes('what am i doing') || cmd.includes('schedule on') || cmd.includes('plans for')) {
+        let eventSummary = "Your time is all yours, sir, but you do have football training coming up on Thursday at 7:30 PM to 8:30 PM";
+        if (cmd.includes('tuesday')) {
+          eventSummary = "Your time is all yours, sir, but you have Badminton academy scheduled on Tuesday from 2:00 PM to 3:00 PM";
+        } else if (cmd.includes('wednesday')) {
+          eventSummary = "Your time is all yours, sir, but you have Badminton club scheduled on Wednesday from 2:00 PM to 3:00 PM";
+        }
+        responseText = `${eventSummary}, sir.`;
+      }
+      else if (cmd.includes('status') || cmd.includes('briefing') || cmd.includes('smart') || (cmd.includes('time') && cmd.includes('weather') && cmd.includes('plans'))) {
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const weatherData = await fetchLiveWeather("Dover");
@@ -702,7 +715,19 @@
         startTrackingMode(objName, zoomVal, false, 0);
         responseText = `Locking onto ${objName} at ${zoomVal}x zoom, sir.`;
       }
-      else if (cmd.includes('time')) {
+      // General Knowledge & Basic Trivia Expanded
+      else if (cmd.includes('population') && (cmd.includes('earth') || cmd.includes('world'))) {
+        responseText = "The current population of Earth is approximately 8.3 billion people, sir.";
+      } else if (cmd.includes('kangaroo')) {
+        responseText = "There are approximately 50 million kangaroos in Australia, sir.";
+      } else if (cmd.includes('speed of light')) {
+        responseText = "The speed of light in a vacuum is approximately 299,792 kilometers per second, sir.";
+      } else if (cmd.includes('capital of')) {
+        if (cmd.includes('france')) responseText = "The capital of France is Paris, sir.";
+        else if (cmd.includes('uk') || cmd.includes('united kingdom') || cmd.includes('england')) responseText = "The capital of the United Kingdom is London, sir.";
+        else if (cmd.includes('japan')) responseText = "The capital of Japan is Tokyo, sir.";
+        else responseText = "Paris is the capital of France, and London is the capital of the United Kingdom, sir.";
+      } else if (cmd.includes('time')) {
         const now = new Date();
         responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
       } else {

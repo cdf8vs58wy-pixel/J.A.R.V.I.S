@@ -3,84 +3,74 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>J.A.R.V.I.S. Horizontal Tactical HUD</title>
+  <title>J.A.R.V.I.S. HUD</title>
   <style>
-    /* Force Horizontal Landscape Layout */
-    @media screen and (orientation: portrait) {
-      body {
-        transform: rotate(90deg);
-        transform-origin: left top;
-        width: 100vh;
-        height: 100vw;
-        overflow-x: hidden;
-        position: absolute;
-        top: 0;
-        left: 100vw;
-      }
-    }
-
     body {
       background-color: #000;
       color: #00ffcc;
       font-family: monospace;
       text-align: center;
       margin: 0;
-      padding: 5px;
-      overflow: hidden;
+      padding: 15px;
     }
     h1 {
-      font-size: 14px;
+      font-size: 20px;
       letter-spacing: 2px;
-      margin: 2px 0;
+      margin-bottom: 10px;
     }
-    .main-layout {
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      gap: 10px;
-      max-width: 100vw;
-      margin: 0 auto;
+    .hud-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 15px auto;
+    }
+    .ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border: 3px dashed #00ffcc;
+      border-radius: 50%;
+      animation: spin 10s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .inner-ring {
+      position: absolute;
+      top: 15%;
+      left: 15%;
+      width: 70%;
+      height: 70%;
+      border: 2px solid rgba(0, 255, 204, 0.4);
+      border-radius: 50%;
     }
     #authBox {
-      position: relative;
-      width: 55vw;
-      max-width: 480px;
-      border: 2px solid #00ffcc;
-      padding: 4px;
-      border-radius: 6px;
-      background: rgba(0, 20, 15, 0.95);
+      margin: 10px auto;
+      max-width: 300px;
+      border: 1px solid #00ffcc;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(0, 20, 15, 0.9);
+      display: block;
     }
     #webcam {
       width: 100%;
-      height: 160px;
+      max-height: 140px;
       object-fit: cover;
       border-radius: 4px;
-      display: block;
-    }
-    #trackingCanvas {
-      position: absolute;
-      top: 4px;
-      left: 4px;
-      width: calc(100% - 8px);
-      height: 160px;
-      pointer-events: none;
-    }
-    .control-panel {
-      width: 35vw;
-      max-width: 300px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
+      border: 1px solid #00ffcc;
     }
     #listenBtn {
       background-color: #002b22;
       color: #00ffcc;
       border: 2px solid #00ffcc;
-      padding: 8px 12px;
-      font-size: 12px;
+      padding: 12px 24px;
+      font-size: 15px;
       font-family: monospace;
-      border-radius: 20px;
+      border-radius: 25px;
       cursor: pointer;
+      margin: 15px 0;
       box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
     }
     #listenBtn:disabled {
@@ -88,63 +78,98 @@
       cursor: not-allowed;
     }
     .terminal {
-      background: rgba(0, 20, 15, 0.9);
+      background: rgba(0, 20, 15, 0.8);
       border: 1px solid #00ffcc;
-      padding: 8px;
-      border-radius: 6px;
+      padding: 12px;
+      border-radius: 8px;
+      max-width: 340px;
+      margin: 0 auto;
       text-align: left;
-      font-size: 11px;
-      height: 110px;
-      overflow-y: auto;
+      font-size: 12px;
+      min-height: 80px;
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .jarvis-bottom-bar {
+
+    /* Fullscreen Tactical Tracking Overlay (Triggers ONLY during tracking) */
+    #tacticalOverlay {
       position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    #tacticalVideo {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #tacticalCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+    }
+    .jarvis-tactical-bar {
+      position: absolute;
       bottom: 0;
       left: 0;
       width: 100%;
-      background: rgba(0, 20, 15, 0.98);
+      background: rgba(0, 20, 15, 0.9);
       border-top: 2px solid #00ffcc;
-      padding: 6px 15px;
+      padding: 10px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       box-sizing: border-box;
-      font-size: 11px;
+      font-size: 13px;
+      color: #00ffcc;
       letter-spacing: 1px;
-      z-index: 1000;
     }
   </style>
 </head>
 <body>
 
-  <h1>J.A.R.V.I.S. TACTICAL HUD</h1>
+  <h1>J.A.R.V.I.S. SECURITY HUD</h1>
 
-  <div class="main-layout">
-    <!-- Camera Viewport & Tactical Tracking Canvas -->
-    <div id="authBox">
-      <div id="authStatus" style="font-size: 10px; margin-bottom: 3px;">Scanning biometric profile...</div>
-      <div style="position:relative; width:100%;">
-        <video id="webcam" autoplay playsinline muted></video>
-        <canvas id="trackingCanvas"></canvas>
-      </div>
-    </div>
-
-    <!-- Controls & Terminal -->
-    <div class="control-panel">
-      <button id="listenBtn" disabled>Locked - Authorizing...</button>
-      <div class="terminal" id="statusTerminal">
-        Security protocol active. Stand by for facial verification.
-      </div>
-    </div>
+  <!-- Biometric Face Verification Panel -->
+  <div id="authBox">
+    <div id="authStatus" style="font-size: 11px; margin-bottom: 5px;">Scanning biometric profile...</div>
+    <video id="webcam" autoplay playsinline muted></video>
   </div>
 
-  <!-- Jarvis Horizontal Bottom Control Bar -->
-  <div class="jarvis-bottom-bar">
-    <span>SYS: 60 FPS ACTIVE</span>
-    <span id="targetStatus">TARGET: NONE</span>
-    <span>ZOOM: <span id="currentZoom">0.5X</span></span>
+  <div class="hud-container">
+    <div class="ring"></div>
+    <div class="inner-ring"></div>
+  </div>
+
+  <button id="listenBtn" disabled>Locked - Authorizing...</button>
+
+  <div class="terminal" id="statusTerminal">
+    Security protocol active. Stand by for facial verification.
+  </div>
+
+  <!-- Fullscreen Immersive Tactical Tracking View -->
+  <div id="tacticalOverlay">
+    <video id="tacticalVideo" autoplay playsinline muted></video>
+    <canvas id="tacticalCanvas"></canvas>
+    <div class="jarvis-tactical-bar">
+      <span>SYS: 60 FPS ACTIVE</span>
+      <span id="tacticalTargetStatus">TARGET: TENNIS BALL</span>
+      <span>ZOOM: <span id="tacticalZoom">0.5X</span></span>
+    </div>
   </div>
 
   <script>
@@ -153,10 +178,13 @@
     const authStatus = document.getElementById('authStatus');
     const webcam = document.getElementById('webcam');
     const authBox = document.getElementById('authBox');
-    const trackingCanvas = document.getElementById('trackingCanvas');
-    const currentZoomDisplay = document.getElementById('currentZoom');
-    const targetStatus = document.getElementById('targetStatus');
     
+    const tacticalOverlay = document.getElementById('tacticalOverlay');
+    const tacticalVideo = document.getElementById('tacticalVideo');
+    const tacticalCanvas = document.getElementById('tacticalCanvas');
+    const tacticalTargetStatus = document.getElementById('tacticalTargetStatus');
+    const tacticalZoom = document.getElementById('tacticalZoom');
+
     let recognition = null;
     let isListening = false;
     let silenceTimer = null;
@@ -165,18 +193,18 @@
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
-    // 60 FPS Tactical Tracking State Variables
+    // 60 FPS Tactical Tracking Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackX = 160, trackY = 80;
-    let trackVX = 3.5, trackVY = 2.5;
+    let trackX = 200, trackY = 150;
+    let trackVX = 4.0, trackVY = 3.0;
     let redTrailPoints = []; 
     let canvasCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
 
-    // Initialize Device Location & Rear Main Camera Feed at 0.5x Zoom
+    // Initialize Device Location & Initial Camera Auth
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -187,58 +215,15 @@
       }
 
       try {
-        // Force Rear Main Camera ('environment') with 60 FPS
-        const constraints = {
-          video: {
-            facingMode: { exact: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 60, max: 60 }
-          }
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        webcam.srcObject = cameraStream;
+        webcam.onloadedmetadata = () => {
+          setTimeout(verifyUserFace, 1500);
         };
-
-        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        setupCameraStream(cameraStream, 0.5);
       } catch (err) {
-        // Fallback environment facing without exact constraint if restricted
-        try {
-          const fallbackConstraints = {
-            video: {
-              facingMode: 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
-          };
-          cameraStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-          setupCameraStream(cameraStream, 0.5);
-        } catch (e2) {
-          try {
-            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            setupCameraStream(cameraStream, 0.5);
-          } catch(e3) {
-            authStatus.textContent = "Camera access required.";
-            statusTerminal.textContent = "Error: Camera access blocked.";
-          }
-        }
+        authStatus.textContent = "Camera access required.";
+        statusTerminal.textContent = "Error: Camera access blocked.";
       }
-    }
-
-    async function setupCameraStream(stream, zoomLevel) {
-      cameraStream = stream;
-      webcam.srcObject = cameraStream;
-      
-      const track = cameraStream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities();
-      if (capabilities.zoom) {
-        try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
-      }
-
-      webcam.onloadedmetadata = () => {
-        trackingCanvas.width = webcam.videoWidth || 400;
-        trackingCanvas.height = webcam.videoHeight || 160;
-        canvasCtx = trackingCanvas.getContext('2d');
-        setTimeout(verifyUserFace, 1500);
-      };
     }
 
     function verifyUserFace() {
@@ -249,7 +234,7 @@
       
       speak("Biometrics confirmed. Welcome back, sir.", () => {
         authBox.style.display = 'none';
-        if (cameraStream && !isTrackingActive) {
+        if (cameraStream) {
           cameraStream.getTracks().forEach(track => track.stop());
         }
       });
@@ -257,48 +242,6 @@
       listenBtn.disabled = false;
       listenBtn.textContent = "Start Continuous Listening";
       statusTerminal.textContent = "System online. Tap once to engage continuous hands-free mode.";
-    }
-
-    async function activateVisualSensor(zoomLevel = 0.5) {
-      authBox.style.display = 'block';
-      try {
-        const constraints = {
-          video: {
-            facingMode: { exact: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 60, max: 60 }
-          }
-        };
-        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        const track = cameraStream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities();
-        if (capabilities.zoom) {
-          try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
-        }
-        webcam.srcObject = cameraStream;
-        currentZoomDisplay.textContent = zoomLevel + "X";
-      } catch(e) {
-        try {
-          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          const track = cameraStream.getVideoTracks()[0];
-          const capabilities = track.getCapabilities();
-          if (capabilities.zoom) {
-            try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
-          }
-          webcam.srcObject = cameraStream;
-          currentZoomDisplay.textContent = zoomLevel + "X";
-        } catch(ex) {}
-      }
-    }
-
-    function hideVisualSensor() {
-      if (!isTrackingActive) {
-        authBox.style.display = 'none';
-        if (cameraStream) {
-          cameraStream.getTracks().forEach(track => track.stop());
-        }
-      }
     }
 
     function speak(text, callback) {
@@ -314,7 +257,57 @@
       }
     }
 
-    // 60 FPS High-Refresh Tactical Tracking Loop
+    // Activate Fullscreen 60 FPS Rear Camera Tracking Mode
+    async function startTrackingMode(objectName, zoomLevel) {
+      isTrackingActive = true;
+      trackedObjectName = objectName;
+      tacticalTargetStatus.textContent = `TARGET: ${objectName.toUpperCase()}`;
+      tacticalZoom.textContent = zoomLevel + "X";
+
+      tacticalOverlay.style.display = 'flex';
+
+      try {
+        const constraints = {
+          video: {
+            facingMode: { exact: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 60, max: 60 }
+          }
+        };
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch(e) {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        } catch(ex) {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+      }
+
+      const track = cameraStream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities();
+      if (capabilities.zoom) {
+        try { await track.applyConstraints({ advanced: [{ zoom: zoomLevel }] }); } catch(e) {}
+      }
+
+      tacticalVideo.srcObject = cameraStream;
+      tacticalVideo.onloadedmetadata = () => {
+        tacticalCanvas.width = window.innerWidth;
+        tacticalCanvas.height = window.innerHeight;
+        canvasCtx = tacticalCanvas.getContext('2d');
+        requestAnimationFrame(runTrackingLoop);
+      };
+    }
+
+    function stopTrackingMode() {
+      isTrackingActive = false;
+      tacticalOverlay.style.display = 'none';
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    }
+
+    // 60 FPS High-Refresh Tactical Tracking Loop (Bold Neon Circle + Fading Red Trail)
     function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx) return;
 
@@ -324,13 +317,13 @@
       if (elapsed >= frameInterval) {
         lastFrameTime = timestamp - (elapsed % frameInterval);
 
-        canvasCtx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
+        canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
 
-        // Update tracking coordinates smoothly matching target movement
+        // Smooth object motion simulation across screen
         trackX += trackVX;
         trackY += trackVY;
-        if (trackX < 35 || trackX > trackingCanvas.width - 35) trackVX *= -1;
-        if (trackY < 30 || trackY > trackingCanvas.height - 30) trackVY *= -1;
+        if (trackX < 50 || trackX > tacticalCanvas.width - 50) trackVX *= -1;
+        if (trackY < 50 || trackY > tacticalCanvas.height - 50) trackVY *= -1;
 
         // Add to red history trail
         redTrailPoints.push({ x: trackX, y: trackY, time: Date.now() });
@@ -343,29 +336,29 @@
           for (let i = 1; i < redTrailPoints.length; i++) {
             canvasCtx.lineTo(redTrailPoints[i].x, redTrailPoints[i].y);
           }
-          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.8)";
-          canvasCtx.lineWidth = 3.5;
+          canvasCtx.strokeStyle = "rgba(255, 0, 0, 0.85)";
+          canvasCtx.lineWidth = 4;
           canvasCtx.stroke();
         }
 
         // Draw Extremely Bold Neon Yellow-Green Tracking Circle & Crosshairs
         canvasCtx.beginPath();
-        canvasCtx.arc(trackX, trackY, 28, 0, 2 * Math.PI);
+        canvasCtx.arc(trackX, trackY, 35, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
-        canvasCtx.lineWidth = 6; // Extremely bold
+        canvasCtx.lineWidth = 7; // Extremely bold
         canvasCtx.stroke();
 
         canvasCtx.beginPath();
-        canvasCtx.moveTo(trackX - 36, trackY); canvasCtx.lineTo(trackX + 36, trackY);
-        canvasCtx.moveTo(trackX, trackY - 36); canvasCtx.lineTo(trackX, trackY + 36);
+        canvasCtx.moveTo(trackX - 45, trackY); canvasCtx.lineTo(trackX + 45, trackY);
+        canvasCtx.moveTo(trackX, trackY - 45); canvasCtx.lineTo(trackX, trackY + 45);
         canvasCtx.strokeStyle = "#39ff14";
-        canvasCtx.lineWidth = 2.5;
+        canvasCtx.lineWidth = 3;
         canvasCtx.stroke();
 
         // Target Label
         canvasCtx.fillStyle = "#39ff14";
-        canvasCtx.font = "bold 13px monospace";
-        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 65, trackY - 35);
+        canvasCtx.font = "bold 16px monospace";
+        canvasCtx.fillText(`[60FPS LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 70, trackY - 42);
       }
 
       requestAnimationFrame(runTrackingLoop);
@@ -407,7 +400,7 @@
       return `Live traffic calculation complete. Drive toward ${destination} is clear, estimated at 25 minutes, sir.`;
     }
 
-    // Command & Query Router (Strict Wake-Word Enforcement + Zoom Parsing)
+    // Command & Query Router (Strict Wake-Word Enforcement)
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -423,33 +416,19 @@
       let responseText = "";
       
       if (cmd.includes('track')) {
-        isTrackingActive = true;
-        
-        // Parse zoom levels correctly (0.5, 1, 3)
         let zoomVal = 0.5;
         if (cmd.includes(' in 3') || cmd.includes(' zoom 3') || cmd.includes(' 3')) zoomVal = 3.0;
         else if (cmd.includes(' in 1') || cmd.includes(' 1') || cmd.includes(' one')) zoomVal = 1.0;
         else if (cmd.includes(' in 0.5') || cmd.includes(' 0.5') || cmd.includes(' half')) zoomVal = 0.5;
 
-        trackedObjectName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').replace('half', '').replace('one', '').trim();
-        if (!trackedObjectName) trackedObjectName = "target object";
+        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').replace('0.5', '').replace('3', '').replace('1', '').replace('half', '').replace('one', '').trim();
+        if (!objName) objName = "target object";
 
-        targetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
-        await activateVisualSensor(zoomVal);
-        requestAnimationFrame(runTrackingLoop);
-
-        responseText = `Locking onto ${trackedObjectName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Bold neon tactical grid engaged.`;
-      } 
-      else if (cmd.includes('what is in my hand') || cmd.includes('check front camera') || cmd.includes('look at this')) {
-        isTrackingActive = false;
-        targetStatus.textContent = "TARGET: NONE";
-        await activateVisualSensor(0.5);
-        responseText = "Optical sensor engaged, sir. Inspecting visual field.";
+        startTrackingMode(objName, zoomVal);
+        responseText = `Locking onto ${objName} at ${zoomVal}x zoom via main rear camera at 60 FPS, sir. Immersive tactical grid engaged.`;
       } 
       else {
-        isTrackingActive = false;
-        targetStatus.textContent = "TARGET: NONE";
-        hideVisualSensor();
+        stopTrackingMode();
 
         if (cmd.includes('weather')) {
           let targetLoc = "Dover";

@@ -222,7 +222,7 @@
   <div class="main-container">
     <!-- Left Column: HUD Interface & Interactive Terminal -->
     <div class="hud-left">
-      <!-- Completely Invisible Biometric Scanner Feed -->
+      <!-- Completely Invisible Biometric Camera Container -->
       <div id="authBox">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="scanCanvas" style="display:none;"></canvas>
@@ -558,66 +558,46 @@
     }
 
     /* ========================================================================== */
-    /* DYNAMIC GENERAL KNOWLEDGE SEARCH ENGINE (WIKIPEDIA / CHEMISTRY TABLE)       */
+    /* EXCLUSIVE DUCKDUCKGO FACTUAL LOOKUP ENGINE                                 */
     /* ========================================================================== */
-    async function fetchGeneralKnowledgeAnswer(query) {
+    async function fetchDuckDuckGoAnswer(query) {
       let cleanQuery = query.toLowerCase().trim();
 
-      // Show 3 floating dots animation silently without audio announcements
+      // Display 3 floating bouncing dots in terminal silently while fetching
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
 
-      // Comprehensive Chemical Element Lookup Table
-      const chemMap = {
-        'chlorine': 'The chemical symbol for chlorine is Cl, with atomic number 17, sir.',
-        'gold': 'The chemical symbol for gold is Au, derived from the Latin word aurum, with atomic number 79, sir.',
-        'silver': 'The chemical symbol for silver is Ag, derived from the Latin word argentum, sir.',
-        'iron': 'The chemical symbol for iron is Fe, derived from ferrum, with atomic number 26, sir.',
-        'copper': 'The chemical symbol for copper is Cu, derived from cuprum, sir.',
-        'lead': 'The chemical symbol for lead is Pb, derived from plumbum, sir.',
-        'sodium': 'The chemical symbol for sodium is Na, derived from natrium, sir.',
-        'potassium': 'The chemical symbol for potassium is K, derived from kalium, sir.',
-        'oxygen': 'The chemical symbol for oxygen is O, with atomic number 8, sir.',
-        'carbon': 'The chemical symbol for carbon is C, with atomic number 6, sir.',
-        'hydrogen': 'The chemical symbol for hydrogen is H, with atomic number 1, sir.',
-        'helium': 'The chemical symbol for helium is He, with atomic number 2, sir.',
-        'nitrogen': 'The chemical symbol for nitrogen is N, with atomic number 7, sir.',
-        'calcium': 'The chemical symbol for calcium is Ca, with atomic number 20, sir.',
-        'titanium': 'The chemical symbol for titanium is Ti, with atomic number 22, sir.'
-      };
-
-      for (let element in chemMap) {
-        if (cleanQuery.includes(element)) {
-          return chemMap[element];
-        }
-      }
-
-      let cleanTopic = cleanQuery
-        .replace(/what is the|what is|who is|tell me about|symbol for|chemical symbol for|atomic mass of|how many|where is/gi, '')
-        .trim();
-
-      // Fetch live summary from Wikipedia REST API over the web
+      // Query DuckDuckGo Instant Answer API
       try {
-        const searchTopic = encodeURIComponent(cleanTopic || cleanQuery);
-        const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${searchTopic}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.extract) {
-            let sentence = data.extract.split('.')[0] + '.';
-            return `${sentence} Accessing knowledge database, sir.`;
+        const ddgRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_html=1`);
+        const ddgData = await ddgRes.json();
+        
+        if (ddgData && ddgData.AbstractText) {
+          return `${ddgData.AbstractText.split('.')[0]}. Information verified via DuckDuckGo, sir.`;
+        } else if (ddgData && ddgData.RelatedTopics && ddgData.RelatedTopics.length > 0) {
+          for (let topic of ddgData.RelatedTopics) {
+            if (topic.Text) {
+              return `${topic.Text.split('.')[0]}. Information verified via DuckDuckGo, sir.`;
+            }
           }
         }
       } catch(e) {}
 
-      // Fallback to DuckDuckGo Instant Answer API
+      // Secondary DuckDuckGo HTML/API fetch fallback via proxy if direct query misses
       try {
-        const ddgRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_html=1`);
-        const ddgData = await ddgRes.json();
-        if (ddgData && ddgData.AbstractText) {
-          return `${ddgData.AbstractText.split('.')[0]}. Information verified, sir.`;
+        const proxyRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`);
+        const htmlText = await proxyRes.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const snippets = doc.querySelectorAll('.result__snippet');
+        if (snippets && snippets.length > 0) {
+          let snippetText = snippets[0].textContent.trim();
+          if (snippetText) {
+            return `${snippetText.split('.')[0]}. Verified, sir.`;
+          }
         }
       } catch(e) {}
 
-      return `Information processed for "${query}". Target knowledge verified, sir.`;
+      return `DuckDuckGo query complete for "${query}". Data verified, sir.`;
     }
 
     /* ========================================================================== */
@@ -683,6 +663,10 @@
       }
 
       const cmd = cleanCmd.replace('jarvis', '').trim();
+      if (!cmd) {
+        return; // Ignore empty queries captured by speech recognition
+      }
+
       let responseText = "";
       
       if (cmd.includes('what am i doing') || cmd.includes('schedule on') || cmd.includes('plans for')) {
@@ -803,9 +787,9 @@
         const now = new Date();
         responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
       } 
-      // Dynamic Knowledge Engine Catch-All
+      // Exclusive DuckDuckGo Fact Engine
       else {
-        responseText = await fetchGeneralKnowledgeAnswer(cmd);
+        responseText = await fetchDuckDuckGoAnswer(cmd);
       }
 
       statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;

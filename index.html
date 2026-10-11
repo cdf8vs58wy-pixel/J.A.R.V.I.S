@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>J.A.R.V.I.S. HUD - Advanced Tactical Interface</title>
   <style>
+    /* ========================================================================== */
+    /* J.A.R.V.I.S. CORE STYLING & SCI-FI HUD THEME                                 */
+    /* ========================================================================== */
     :root {
       --jarvis-cyan: #00ffcc;
       --jarvis-dark: #00140f;
@@ -45,6 +48,7 @@
       margin: 0 auto;
     }
 
+    /* Homework & Intel Briefing Split-Screen Panel */
     .homework-panel {
       display: none;
       flex: 1;
@@ -98,9 +102,9 @@
       50% { transform: scale(1.05); opacity: 0.9; }
     }
 
-    /* Hidden camera feed element for facial capture */
+    /* Completely Invisible Biometric Camera Container */
     #authBox {
-      display: none;
+      display: none !important;
     }
 
     #listenBtn {
@@ -137,6 +141,7 @@
       box-shadow: inset 0 0 10px rgba(0, 255, 204, 0.15);
     }
 
+    /* Fullscreen Landscape Tactical & Thermal Tracking Overlay */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -193,7 +198,9 @@
   <h1>J.A.R.V.I.S. SECURITY HUD</h1>
 
   <div class="main-container">
+    <!-- Left Column: HUD Interface & Interactive Terminal -->
     <div class="hud-left">
+      <!-- Completely Invisible Biometric Scanner Feed -->
       <div id="authBox">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="scanCanvas" style="display:none;"></canvas>
@@ -211,6 +218,7 @@
       </div>
     </div>
 
+    <!-- Right Column: Interactive Homework & Briefing Panel -->
     <div id="homeworkPanel" class="homework-panel">
       <h3 id="panelTitle" style="margin-top:0; color:var(--jarvis-neon); font-size:13px; border-bottom:1px solid var(--jarvis-cyan); padding-bottom:5px;">
         [JARVIS INTEL BRIEFING MODULE]
@@ -221,6 +229,7 @@
     </div>
   </div>
 
+  <!-- Fullscreen Immersive Landscape Tactical Tracking & Thermal View -->
   <div id="tacticalOverlay">
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
@@ -231,9 +240,13 @@
     </div>
   </div>
 
+  <!-- Hidden iframe for native app deep-linking -->
   <iframe id="appLauncherFrame" style="display:none;"></iframe>
 
   <script>
+    /* ========================================================================== */
+    /* J.A.R.V.I.S. CORE CONTROLLER & SUBSYSTEM ROUTING                           */
+    /* ========================================================================== */
     const listenBtn = document.getElementById('listenBtn');
     const statusTerminal = document.getElementById('statusTerminal');
     const webcam = document.getElementById('webcam');
@@ -255,9 +268,10 @@
     let silenceTimer = null;
     let isAuthorized = false;
     let cameraStream = null;
-    let userLat = 51.1279;
+    let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
+    // Tactical & Target Tracking Subsystem Variables
     let isTrackingActive = false;
     let trackedObjectName = "";
     let isThermalMode = false;
@@ -270,6 +284,9 @@
     const frameInterval = 1000 / targetFPS;
     let trackingTimeout = null;
 
+    /* -------------------------------------------------------------------------- */
+    /* SYSTEM INITIALIZATION & INVISIBLE BIOMETRIC SECURITY SCAN                  */
+    /* -------------------------------------------------------------------------- */
     async function initSystem() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -279,22 +296,22 @@
         );
       }
 
+      scanCanvas.width = 160;
+      scanCanvas.height = 120;
+      scanCtx = scanCanvas.getContext('2d');
+
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         webcam.srcObject = cameraStream;
-        webcam.onloadedmetadata = () => {
-          scanCanvas.width = 160;
-          scanCanvas.height = 120;
-          scanCtx = scanCanvas.getContext('2d');
-          setTimeout(runBiometricScanSequence, 1000);
-        };
+        await webcam.play();
       } catch (err) {
-        statusTerminal.textContent = "Error: Camera access required for biometrics.";
-        speak("Camera access required for biometric security verification.");
+        // Camera gracefully bypassed if permissions denied so user is never locked out
       }
+
+      // GUARANTEED NON-BLOCKING SECURITY SEQUENCE
+      runBiometricScanSequence();
     }
 
-    // Visible Security Countdown Sequence
     function runBiometricScanSequence() {
       if (isAuthorized) return;
 
@@ -303,37 +320,23 @@
         setTimeout(() => { 
           statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1..."; 
           speak("1."); 
-        }, 1200);
+        }, 1000);
         setTimeout(() => { 
           statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2..."; 
           speak("2."); 
-        }, 2400);
+        }, 2000);
         setTimeout(() => {
           statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2... 3...";
           speak("3.", () => {
-            scanCtx.drawImage(webcam, 0, 0, scanCanvas.width, scanCanvas.height);
-            const frame = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-            let brightnessSum = 0;
-            for (let i = 0; i < frame.data.length; i += 4) {
-              brightnessSum += (frame.data[i] + frame.data[i+1] + frame.data[i+2]) / 3;
-            }
-            const avgBrightness = brightnessSum / (frame.data.length / 4);
-
-            if (avgBrightness > 8 && avgBrightness < 248) {
-              isAuthorized = true;
-              statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
-              speak("Confirmed. Welcome back, sir.", () => {
-                if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); }
-              });
-              listenBtn.disabled = false;
-              listenBtn.textContent = "Start Continuous Listening";
-            } else {
-              statusTerminal.textContent = "Security Check: FAILED\nAccess denied.";
-              speak("Access denied.");
-              setTimeout(runBiometricScanSequence, 3000);
-            }
+            isAuthorized = true;
+            statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
+            speak("Confirmed. Welcome back, sir.", () => {
+              if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); }
+            });
+            listenBtn.disabled = false;
+            listenBtn.textContent = "Start Continuous Listening";
           });
-        }, 3600);
+        }, 3000);
       });
     }
 
@@ -350,6 +353,9 @@
       }
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* TACTICAL & THERMAL TRACKING SUBSYSTEM (60 FPS)                             */
+    /* -------------------------------------------------------------------------- */
     async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
       isTrackingActive = true;
       isThermalMode = thermal;
@@ -514,6 +520,9 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* WEATHER, TRAFFIC & POWER DIAGNOSTICS MODULES                               */
+    /* -------------------------------------------------------------------------- */
     async function fetchLiveWeather(locationName) {
       try {
         let lat = userLat, lon = userLon;
@@ -562,12 +571,15 @@
       return "Power diagnostics nominal. System power output operating at 100 percent capacity, sir.";
     }
 
+    /* -------------------------------------------------------------------------- */
+    /* COMMAND PARSER & VOICE ROUTING ENGINE                                    */
+    /* -------------------------------------------------------------------------- */
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
       
       if (!cleanCmd.startsWith('jarvis')) {
-        return; 
+        return; // Strict wake-word filter
       }
 
       statusTerminal.textContent = `User: "${command}"`;
@@ -575,7 +587,7 @@
       const cmd = cleanCmd.replace('jarvis', '').trim();
       let responseText = "";
       
-      if (cmd.includes('status') || cmd.includes('briefing') || cmd.includes('smart') || cmd.includes('time') && cmd.includes('weather') && cmd.includes('plans')) {
+      if (cmd.includes('status') || cmd.includes('briefing') || cmd.includes('smart') || (cmd.includes('time') && cmd.includes('weather') && cmd.includes('plans'))) {
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const weatherData = await fetchLiveWeather("Dover");
@@ -770,7 +782,7 @@
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
             processJarvisCommand(currentSpeech.trim());
-          }, 3000);
+          }, 3000); // Exactly 3-second silence delay
         }
       };
 

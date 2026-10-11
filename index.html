@@ -285,7 +285,7 @@
     let trackingTimeout = null;
 
     /* -------------------------------------------------------------------------- */
-    /* SYSTEM INITIALIZATION & INVISIBLE BIOMETRIC SECURITY SCAN                  */
+    /* SYSTEM INITIALIZATION & NON-BLOCKING BIOMETRIC SECURITY SCAN               */
     /* -------------------------------------------------------------------------- */
     async function initSystem() {
       if (navigator.geolocation) {
@@ -296,19 +296,12 @@
         );
       }
 
-      scanCanvas.width = 160;
-      scanCanvas.height = 120;
-      scanCtx = scanCanvas.getContext('2d');
-
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         webcam.srcObject = cameraStream;
-        await webcam.play();
-      } catch (err) {
-        // Camera gracefully bypassed if permissions denied so user is never locked out
-      }
+      } catch (err) {}
 
-      // GUARANTEED NON-BLOCKING SECURITY SEQUENCE
+      // Start non-blocking security sequence immediately
       runBiometricScanSequence();
     }
 
@@ -316,40 +309,42 @@
       if (isAuthorized) return;
 
       statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...";
-      speak("Confirming biometrics.", () => {
-        setTimeout(() => { 
-          statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1..."; 
-          speak("1."); 
-        }, 1000);
-        setTimeout(() => { 
-          statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2..."; 
-          speak("2."); 
-        }, 2000);
-        setTimeout(() => {
-          statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2... 3...";
-          speak("3.", () => {
-            isAuthorized = true;
-            statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
-            speak("Confirmed. Welcome back, sir.", () => {
-              if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); }
-            });
-            listenBtn.disabled = false;
-            listenBtn.textContent = "Start Continuous Listening";
-          });
-        }, 3000);
-      });
+      speak("Confirming biometrics.");
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1...";
+        speak("1.");
+      }, 1000);
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2...";
+        speak("2.");
+      }, 2000);
+
+      setTimeout(() => {
+        statusTerminal.textContent = "Security Scan in Progress...\nConfirming biometrics...\n1... 2... 3...";
+        speak("3.");
+      }, 3000);
+
+      setTimeout(() => {
+        isAuthorized = true;
+        statusTerminal.textContent = "Security Check: SUCCESS\nConfirmed. Welcome back, sir.";
+        speak("Confirmed. Welcome back, sir.");
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(t => t.stop());
+        }
+        listenBtn.disabled = false;
+        listenBtn.textContent = "Start Continuous Listening";
+      }, 4000);
     }
 
-    function speak(text, callback) {
+    function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
         utterance.pitch = 0.9;
-        if (callback) utterance.onend = callback;
         window.speechSynthesis.speak(utterance);
-      } else if (callback) {
-        callback();
       }
     }
 
@@ -736,11 +731,10 @@
       }
 
       statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
-      speak(responseText, () => {
-        if (isListening && recognition && isAuthorized) {
-          try { recognition.start(); } catch(e) {}
-        }
-      });
+      speak(responseText);
+      if (isListening && recognition && isAuthorized) {
+        try { recognition.start(); } catch(e) {}
+      }
     }
 
     function initSpeechRecognition() {
@@ -782,7 +776,7 @@
           silenceTimer = setTimeout(() => {
             try { rec.stop(); } catch(e) {}
             processJarvisCommand(currentSpeech.trim());
-          }, 3000); // Exactly 3-second silence delay
+          }, 3000);
         }
       };
 
@@ -801,12 +795,11 @@
       if (!isAuthorized) return;
       
       if (!isListening) {
-        speak("Yes, sir", () => {
-          recognition = initSpeechRecognition();
-          if (recognition) {
-            try { recognition.start(); } catch(e) {}
-          }
-        });
+        speak("Yes, sir");
+        recognition = initSpeechRecognition();
+        if (recognition) {
+          try { recognition.start(); } catch(e) {}
+        }
       } else {
         isListening = false;
         listenBtn.textContent = "Start Continuous Listening";

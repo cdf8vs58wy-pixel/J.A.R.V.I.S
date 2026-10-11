@@ -102,7 +102,7 @@
       50% { transform: scale(1.05); opacity: 0.9; }
     }
 
-    /* Biometric Camera Viewport Container with 0.5X Ultra-Wide Field */
+    /* Biometric Camera Viewport Container (Hides automatically after login) */
     #authBox {
       display: block;
       width: 160px;
@@ -286,6 +286,7 @@
     const statusTerminal = document.getElementById('statusTerminal');
     const webcam = document.getElementById('webcam');
     const scanCanvas = document.getElementById('scanCanvas');
+    const authBox = document.getElementById('authBox');
     const appLauncherFrame = document.getElementById('appLauncherFrame');
     const homeworkPanel = document.getElementById('homeworkPanel');
     const homeworkContent = document.getElementById('homeworkContent');
@@ -302,7 +303,7 @@
     let isListening = false;
     let isAuthorized = false;
     let cameraStream = null;
-    let userFaceSignature = null; // Stores your unique facial color/lighting signature
+    let userFaceSignature = null; 
     let userLat = 51.1279; // Dover coordinates
     let userLon = 1.3134;
 
@@ -333,7 +334,6 @@
         );
       }
 
-      // Initialize camera with 0.5X ultra-wide constraints
       try {
         const constraints = {
           video: {
@@ -369,7 +369,7 @@
     }
 
     /* ========================================================================== */
-    /* STRICT 0.5X ULTRA-WIDE FACE MEMORY & VERIFICATION SUBSYSTEM                */
+    /* STRICT 0.5X ULTRA-WIDE FACE MEMORY & HIDE CAMERA UPON SUCCESS              */
     /* ========================================================================== */
     async function startBiometricAuth() {
       listenBtn.disabled = true;
@@ -396,7 +396,6 @@
       const avgB = bSum / totalPixels;
       const brightness = (avgR + avgG + avgB) / 3;
 
-      // Ensure face is present in view
       if (brightness < 12 || brightness > 245) {
         listenBtn.disabled = false;
         listenBtn.textContent = "Tap to Initiate Security Scan";
@@ -405,7 +404,6 @@
         return;
       }
 
-      // If already authorized, verify that the current face matches the initial saved signature
       if (isAuthorized && userFaceSignature) {
         const colorDiff = Math.abs(avgR - userFaceSignature.r) + Math.abs(avgG - userFaceSignature.g) + Math.abs(avgB - userFaceSignature.b);
         if (colorDiff > 45) {
@@ -435,7 +433,11 @@
 
       setTimeout(() => {
         isAuthorized = true;
-        userFaceSignature = { r: avgR, g: avgG, b: avgB }; // Remember your exact face signature
+        userFaceSignature = { r: avgR, g: avgG, b: avgB }; 
+        
+        // Hide the camera viewport container completely once identified!
+        authBox.style.display = 'none';
+
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nFace locked and remembered. Welcome back, sir.";
         speak("Face locked and remembered. Welcome back, sir.");
 
@@ -622,10 +624,8 @@
     async function fetchUniversalAnswer(query) {
       let cleanQuery = query.toLowerCase().trim();
 
-      // Show 3 floating bouncing dots in terminal silently while processing
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
 
-      // Comprehensive core database for instant zero-latency responses
       const knowledgeBase = {
         'aluminum': 'The chemical symbol for aluminum is Al, with atomic number 13, sir.',
         'aluminium': 'The chemical symbol for aluminium is Al, with atomic number 13, sir.',
@@ -654,7 +654,6 @@
         }
       }
 
-      // Universal DuckDuckGo Instant Answer API query for ANY question asked
       try {
         const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_html=1&skip_disambig=1`);
         const data = await response.json();
@@ -852,7 +851,6 @@
         const now = new Date();
         responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
       } 
-      // Universal Answer Engine for ANY question
       else {
         responseText = await fetchUniversalAnswer(cmd);
       }

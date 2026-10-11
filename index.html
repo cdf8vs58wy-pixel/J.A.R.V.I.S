@@ -87,7 +87,7 @@
   <button id="listenBtn">Start Continuous Listening</button>
 
   <div class="terminal" id="statusTerminal">
-    System online, sir. Tap start once, then say your command.
+    System online, sir. Tap start once, then state your query.
   </div>
 
   <script>
@@ -95,20 +95,28 @@
     const statusTerminal = document.getElementById('statusTerminal');
     let recognition = null;
     let isListening = false;
+    let silenceTimer = null;
+    let finalTranscript = "";
 
     // Text-to-Speech function for J.A.R.V.I.S. voice replies
-    function speak(text) {
+    function speak(text, callback) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
         utterance.pitch = 0.9;
+        if (callback) {
+          utterance.onend = callback;
+        }
         window.speechSynthesis.speak(utterance);
+      } else if (callback) {
+        callback();
       }
     }
 
-    // Command router covering all your system features
+    // Command router covering all system features
     function processJarvisCommand(command) {
+      if (!command) return;
       const cmd = command.toLowerCase();
       let responseText = "";
       
@@ -145,7 +153,7 @@
 
       const rec = new SpeechRecognition();
       rec.continuous = true;
-      rec.interimResults = false;
+      rec.interimResults = true;
       rec.lang = 'en-US';
 
       rec.onstart = () => {
@@ -153,14 +161,35 @@
         listenBtn.textContent = "Ready when you are, sir";
         listenBtn.style.background = "#00ffcc";
         listenBtn.style.color = "#000";
-        statusTerminal.textContent = "System active. Listening for your command...";
-        speak("Ready when you are, sir");
+        statusTerminal.textContent = "System active. Listening...";
       };
 
       rec.onresult = (event) => {
-        const last = event.results.length - 1;
-        const transcript = event.results[last][0].transcript.trim();
-        processJarvisCommand(transcript);
+        let interim = "";
+        finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+
+        const currentSpeech = finalTranscript || interim;
+        if (currentSpeech) {
+          statusTerminal.textContent = `Hearing: "${currentSpeech}"`;
+          
+          // Clear previous silence timer on new sound
+          clearTimeout(silenceTimer);
+          
+          // Automatically process query after 2 seconds of silence
+          silenceTimer = setTimeout(() => {
+            try { rec.stop(); } catch(e) {}
+            processJarvisCommand(currentSpeech.trim());
+            stopListening();
+          }, 2000);
+        }
       };
 
       rec.onerror = (event) => {
@@ -169,14 +198,8 @@
       };
 
       rec.onend = () => {
-        if (isListening) {
-          try {
-            rec.start();
-          } catch (e) {
-            stopListening();
-          }
-        } else {
-          stopListening();
+        if (isListening && !finalTranscript) {
+          try { rec.start(); } catch (e) { stopListening(); }
         }
       };
 
@@ -185,6 +208,7 @@
 
     function stopListening() {
       isListening = false;
+      clearTimeout(silenceTimer);
       listenBtn.textContent = "Start Continuous Listening";
       listenBtn.style.background = "";
       listenBtn.style.color = "";
@@ -195,14 +219,17 @@
 
     listenBtn.addEventListener('click', () => {
       if (!isListening) {
-        recognition = initSpeechRecognition();
-        if (recognition) {
-          try {
-            recognition.start();
-          } catch(e) {
-            statusTerminal.textContent = "Mic session active. Speak your command.";
+        // Speak "Yes, sir" first, then fire up the microphone
+        speak("Yes, sir", () => {
+          recognition = initSpeechRecognition();
+          if (recognition) {
+            try {
+              recognition.start();
+            } catch(e) {
+              statusTerminal.textContent = "Mic active. Speak your command.";
+            }
           }
-        }
+        });
       } else {
         stopListening();
       }

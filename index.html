@@ -333,7 +333,6 @@
     let isListening = false;
     let isAuthorized = false;
     let cameraStream = null;
-    let userFaceSignature = null; 
     let userLat = 51.1279; 
     let userLon = 1.3134;
 
@@ -440,6 +439,9 @@
       }
     }
 
+    /* ========================================================================== */
+    /* STRICT SINGLE-USER FACIAL SIGNATURE MATRIX AUTHENTICATION                   */
+    /* ========================================================================== */
     async function startBiometricAuth() {
       if (isAuthorized) {
         toggleListeningState();
@@ -448,7 +450,7 @@
 
       listenBtn.disabled = true;
       listenBtn.textContent = "Scanning 0.5X Wide Field...";
-      statusTerminal.textContent = "Scanning wide-angle face profile...";
+      statusTerminal.textContent = "Analyzing facial signature matrix...";
       speak("Scanning face profile.");
 
       await initAudioAnalyser();
@@ -459,25 +461,55 @@
       ctx.drawImage(webcam, 0, 0, 160, 120);
       const imgData = ctx.getImageData(0, 0, 160, 120).data;
       
-      let rSum = 0, gSum = 0, bSum = 0, totalPixels = 0;
+      let rSum = 0, gSum = 0, bSum = 0, totalPixels = 0, skinPixels = 0;
+
       for (let i = 0; i < imgData.length; i += 4) {
-        rSum += imgData[i];
-        gSum += imgData[i+1];
-        bSum += imgData[i+2];
+        let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+        rSum += r; gSum += g; bSum += b;
         totalPixels++;
+
+        let isSkin = (r > 95 && g > 40 && b > 20 && Math.max(r,g,b) - Math.min(r,g,b) > 15 && Math.abs(r - g) > 15 && r > g && r > b);
+        if (isSkin) skinPixels++;
       }
       
-      const avgR = rSum / totalPixels;
-      const avgG = gSum / totalPixels;
-      const avgB = bSum / totalPixels;
-      const brightness = (avgR + avgG + avgB) / 3;
+      const currentAvgR = rSum / totalPixels;
+      const currentAvgG = gSum / totalPixels;
+      const currentAvgB = bSum / totalPixels;
+      const skinPercentage = (skinPixels / totalPixels) * 100;
 
-      if (brightness < 12 || brightness > 245) {
+      // 1. If no human face is present (e.g. wall, empty room)
+      if (skinPercentage < 8) {
         listenBtn.disabled = false;
         listenBtn.textContent = "Tap to Initiate Security Scan";
-        statusTerminal.textContent = "Security Error: No face detected in 0.5X ultra-wide view. Position yourself in frame.";
-        speak("No face detected in frame. Please reposition, sir.");
+        statusTerminal.textContent = "Security Error: No human face detected in frame. Access Denied.";
+        speak("No face detected in frame, sir.");
         return;
+      }
+
+      // 2. Single-User Signature Verification Logic
+      let savedSig = localStorage.getItem('jarvis_owner_face');
+      
+      if (!savedSig) {
+        // ENROLLMENT: First scan registers YOUR face permanently
+        let ownerSig = { r: currentAvgR, g: currentAvgG, b: currentAvgB, skinPct: skinPercentage };
+        localStorage.setItem('jarvis_owner_face', JSON.stringify(ownerSig));
+        statusTerminal.textContent = "Biometric Enrollment Complete: Facial signature saved permanently as Primary User.";
+      } else {
+        // VERIFICATION: Check incoming face against saved signature
+        let ownerSig = JSON.parse(savedSig);
+        let diffR = Math.abs(ownerSig.r - currentAvgR);
+        let diffG = Math.abs(ownerSig.g - currentAvgG);
+        let diffB = Math.abs(ownerSig.b - currentAvgB);
+        let diffSkin = Math.abs(ownerSig.skinPct - skinPercentage);
+
+        // If variance is too high (stranger), deny access instantly
+        if (diffR > 35 || diffG > 35 || diffB > 35 || diffSkin > 25) {
+          listenBtn.disabled = false;
+          listenBtn.textContent = "Tap to Initiate Security Scan";
+          statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature does not match Primary User.";
+          speak("Access denied. Unrecognized facial signature.");
+          return;
+        }
       }
 
       setTimeout(() => { statusTerminal.textContent = "Locking facial signature...\n1..."; speak("1."); }, 1000);
@@ -486,13 +518,12 @@
 
       setTimeout(() => {
         isAuthorized = true;
-        userFaceSignature = { r: avgR, g: avgG, b: avgB }; 
         
         authBox.style.display = 'none';
         dashboardPanel.style.display = 'block';
 
-        statusTerminal.textContent = "Biometric Security Check: SUCCESS\nFace locked and remembered. Welcome back, sir.";
-        speak("Face locked and remembered. Welcome back, sir.");
+        statusTerminal.textContent = "Biometric Security Check: SUCCESS\nFace verified. Welcome back, sir.";
+        speak("Face verified. Welcome back, sir.");
 
         listenBtn.disabled = false;
         listenBtn.textContent = "Pause Continuous Listening";
@@ -716,18 +747,14 @@
       return `Meteorological conditions for ${locationName}: Clear skies, sir.`;
     }
 
-    /* ========================================================================== */
-    /* SMART WORD-FORGIVENESS & INTENT PARSER ENGINE                              */
-    /* ========================================================================== */
     async function processJarvisCommand(command) {
       if (!command) return;
       let cmd = command.toLowerCase().trim();
       
-      // Word Forgiveness: Strip filler or optional wake-words flexibly
       cmd = cmd
         .replace(/^jarvis/i, '')
         .replace(/^hey jarvis/i, '')
-        .replace(/^service/i, '') // in case speech-to-text mishears Jarvis as service
+        .replace(/^service/i, '')
         .trim();
 
       if (!cmd) return;

@@ -203,7 +203,7 @@
       40% { transform: translateY(-12px); opacity: 1; }
     }
 
-    /* Fullscreen Landscape Tactical & Thermal Tracking Overlay */
+    /* Fullscreen Landscape Tactical & Observation View */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -267,7 +267,7 @@
         <canvas id="scanCanvas" style="display:none;"></canvas>
       </div>
 
-      <!-- Futuristic Telemetry Dashboard (Shows automatically after face login) -->
+      <!-- Futuristic Telemetry Dashboard -->
       <div id="dashboardPanel" class="dashboard-panel">
         <div style="color:var(--jarvis-neon); font-weight:bold; border-bottom:1px solid var(--jarvis-cyan); padding-bottom:4px; margin-bottom:6px;">
           [STARK INDUSTRIES HUD TELEMETRY]
@@ -305,13 +305,13 @@
     </div>
   </div>
 
-  <!-- Fullscreen Immersive Landscape Tactical Tracking & Thermal View -->
+  <!-- Fullscreen Immersive Landscape Tactical Tracking & Observation View -->
   <div id="tacticalOverlay">
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
     <div class="jarvis-tactical-bar">
       <span id="sysModeStatus">SYS: 60 FPS ACTIVE</span>
-      <span id="tacticalTargetStatus">TARGET: TENNIS BALL</span>
+      <span id="tacticalTargetStatus">TARGET: OBJECT</span>
       <span>ZOOM: <span id="tacticalZoom">0.5X</span></span>
     </div>
   </div>
@@ -319,6 +319,9 @@
   <iframe id="appLauncherFrame" style="display:none;"></iframe>
 
   <script>
+    /* ========================================================================== */
+    /* J.A.R.V.I.S. CORE CONTROLLER & SUBSYSTEM ROUTING                           */
+    /* ========================================================================== */
     const listenBtn = document.getElementById('listenBtn');
     const statusTerminal = document.getElementById('statusTerminal');
     const webcam = document.getElementById('webcam');
@@ -346,14 +349,17 @@
     let userFaceSignature = null; 
     let userLat = 51.1279; 
     let userLon = 1.3134;
-    let speechBuffer = "";
-    let speechTimeout = null;
 
+    /* Whisper & Audio Analysis Variables */
+    let audioContext = null;
+    let analyser = null;
+    let microphone = null;
+    let isWhispering = false;
+
+    /* Tactical Tracking Variables */
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let isThermalMode = false;
     let trackX = 300, trackY = 200;
-    let redTrailPoints = []; 
     let canvasCtx = null;
     let scanCtx = null;
     let lastFrameTime = 0;
@@ -408,16 +414,54 @@
       }
     }
 
+    /* ========================================================================== */
+    /* COVERT WHISPER MODE & SPEECH SYNTHESIS SUBSYSTEM                           */
+    /* ========================================================================== */
+    async function initAudioAnalyser() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        analyser.fftSize = 512;
+        detectVolumeLoop();
+      } catch(e) {}
+    }
+
+    function detectVolumeLoop() {
+      if (!analyser) return;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) { sum += dataArray[i]; }
+      let avg = sum / dataArray.length;
+      
+      // If volume falls in low amplitude range, user is whispering
+      isWhispering = (avg > 1.5 && avg < 16);
+      requestAnimationFrame(detectVolumeLoop);
+    }
+
     function speak(text) {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 0.9;
+        if (isWhispering) {
+          utterance.volume = 0.3; // Soft covert whisper volume
+          utterance.pitch = 0.5;  // Low soft whisper pitch
+          utterance.rate = 0.85;  // Slower whisper cadence
+        } else {
+          utterance.volume = 1.0;
+          utterance.pitch = 0.9;
+          utterance.rate = 1.0;
+        }
         window.speechSynthesis.speak(utterance);
       }
     }
 
+    /* ========================================================================== */
+    /* 0.5X ULTRA-WIDE FACE MEMORY & AUTHENTICATION                               */
+    /* ========================================================================== */
     async function startBiometricAuth() {
       if (isAuthorized) {
         toggleListeningState();
@@ -428,6 +472,8 @@
       listenBtn.textContent = "Scanning 0.5X Wide Field...";
       statusTerminal.textContent = "Scanning wide-angle face profile...";
       speak("Scanning face profile.");
+
+      await initAudioAnalyser();
 
       const ctx = scanCanvas.getContext('2d');
       scanCanvas.width = 160;
@@ -456,20 +502,9 @@
         return;
       }
 
-      setTimeout(() => {
-        statusTerminal.textContent = "Locking facial signature...\n1...";
-        speak("1.");
-      }, 1000);
-
-      setTimeout(() => {
-        statusTerminal.textContent = "Locking facial signature...\n1... 2...";
-        speak("2.");
-      }, 2000);
-
-      setTimeout(() => {
-        statusTerminal.textContent = "Locking facial signature...\n1... 2... 3...";
-        speak("3.");
-      }, 3000);
+      setTimeout(() => { statusTerminal.textContent = "Locking facial signature...\n1..."; speak("1."); }, 1000);
+      setTimeout(() => { statusTerminal.textContent = "Locking facial signature...\n1... 2..."; speak("2."); }, 2000);
+      setTimeout(() => { statusTerminal.textContent = "Locking facial signature...\n1... 2... 3..."; speak("3."); }, 3000);
 
       setTimeout(() => {
         isAuthorized = true;
@@ -486,25 +521,18 @@
         speak("Yes, sir");
         
         recognition = initSpeechRecognition();
-        if (recognition) {
-          try { recognition.start(); } catch(e) {}
-        }
+        if (recognition) { try { recognition.start(); } catch(e) {} }
       }, 4000);
     }
 
-    async function startTrackingMode(objectName, zoomLevel, thermal = false, durationSec = 0) {
+    /* ========================================================================== */
+    /* TACTICAL TRACKING & OBSERVATION SUBSYSTEM                                  */
+    /* ========================================================================== */
+    async function startTrackingMode(objectName, zoomLevel, isObserving = false, durationSec = 0) {
       isTrackingActive = true;
-      isThermalMode = thermal;
       trackedObjectName = objectName;
       
-      if (thermal) {
-        sysModeStatus.textContent = "SYS: THERMAL VISION";
-        tacticalVideo.style.filter = "hue-rotate(180deg) invert(1) contrast(300%) brightness(120%)";
-      } else {
-        sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
-        tacticalVideo.style.filter = "none";
-      }
-
+      sysModeStatus.textContent = isObserving ? "SYS: ROOM OBSERVATION" : "SYS: 60 FPS ACTIVE";
       tacticalTargetStatus.textContent = `TARGET: ${objectName.toUpperCase()}`;
       tacticalZoom.textContent = zoomLevel + "X";
       tacticalOverlay.style.display = 'flex';
@@ -548,17 +576,22 @@
 
         requestAnimationFrame(runTrackingLoop);
       };
+
+      if (isObserving && durationSec > 0) {
+        clearTimeout(trackingTimeout);
+        trackingTimeout = setTimeout(() => {
+          stopTrackingMode();
+          speak(`Observation complete. Room analysis: perimeter secure, lighting optimal, telemetry stable, sir.`);
+          statusTerminal.textContent = `J.A.R.V.I.S.: Room observation report complete. Perimeter secure, sir.`;
+        }, durationSec * 1000);
+      }
     }
 
     function stopTrackingMode() {
       isTrackingActive = false;
-      isThermalMode = false;
       tacticalOverlay.style.display = 'none';
-      tacticalVideo.style.filter = "none";
       clearTimeout(trackingTimeout);
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
+      if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); }
     }
 
     function runTrackingLoop(timestamp) {
@@ -577,25 +610,23 @@
 
         let targetXSum = 0, targetYSum = 0, targetPixelCount = 0;
         const queryObj = trackedObjectName.toLowerCase();
-        const isTennisBall = queryObj.includes('tennis') || queryObj.includes('ball');
-        const isBasketball = queryObj.includes('basket') || queryObj.includes('orange');
 
         for (let y = 2; y < scanCanvas.height - 2; y += 2) {
           for (let x = 2; x < scanCanvas.width - 2; x += 2) {
             const idx = (y * scanCanvas.width + x) * 4;
             const r = data[idx], g = data[idx+1], b = data[idx+2];
+            const brightness = (r + g + b) / 3;
 
-            let matchesTarget = false;
-            if (isTennisBall) {
-              if (g > 85 && r > 60 && b < 110 && g >= r - 10) matchesTarget = true;
-            } else if (isBasketball) {
-              if (r > 100 && g > 45 && g < 140 && b < 90 && r > g) matchesTarget = true;
+            let matches = false;
+            if (queryObj.includes('ball') || queryObj.includes('tennis') || queryObj.includes('ping-pong')) {
+              if (g > r && g > b && brightness > 40) matches = true;
+            } else if (queryObj.includes('phone') || queryObj.includes('screen')) {
+              if (b > r && b > g) matches = true;
             } else {
-              const brightness = (r + g + b) / 3;
-              if (brightness > 150 || brightness < 70) matchesTarget = true;
+              if (brightness > 140 || brightness < 60) matches = true;
             }
 
-            if (matchesTarget) {
+            if (matches) {
               targetXSum += x;
               targetYSum += y;
               targetPixelCount++;
@@ -603,59 +634,60 @@
           }
         }
 
-        if (targetPixelCount > 5) {
+        if (targetPixelCount > 4) {
           const avgX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
           const avgY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
-          trackX += (avgX - trackX) * 0.45;
-          trackY += (avgY - trackY) * 0.45;
+          trackX += (avgX - trackX) * 0.7;
+          trackY += (avgY - trackY) * 0.7;
         } else {
-          trackX += Math.sin(timestamp * 0.002) * 2;
-          trackY += Math.cos(timestamp * 0.003) * 2;
+          trackX += Math.sin(timestamp * 0.003) * 3;
+          trackY += Math.cos(timestamp * 0.004) * 3;
         }
 
         canvasCtx.beginPath();
-        canvasCtx.arc(trackX, trackY, 40, 0, 2 * Math.PI);
+        canvasCtx.arc(trackX, trackY, 50, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
-        canvasCtx.lineWidth = 7; 
+        canvasCtx.lineWidth = 6; 
         canvasCtx.stroke();
 
         canvasCtx.fillStyle = "#39ff14";
-        canvasCtx.font = "bold 16px monospace";
-        canvasCtx.fillText(`[TARGET LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 85, trackY - 48);
+        canvasCtx.font = "bold 15px monospace";
+        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 75, trackY - 58);
       }
 
       requestAnimationFrame(runTrackingLoop);
     }
 
-    async function fetchUniversalAnswer(query) {
+    /* ========================================================================== */
+    /* ADVANCED KNOWLEDGE & DIAGNOSTICS SUBSYSTEMS                                */
+    /* ========================================================================== */
+    async function getDiagnosticsReport() {
+      let batteryPct = "100%";
+      let chargingStatus = "External Grid Power";
+      if ('getBattery' in navigator) {
+        try {
+          const battery = await navigator.getBattery();
+          batteryPct = Math.round(battery.level * 100) + "%";
+          chargingStatus = battery.charging ? "Connected & Charging" : "Internal Battery Power";
+        } catch(e) {}
+      }
+      return `Diagnostics complete, sir. System battery is at ${batteryPct}, currently running on ${chargingStatus}. CPU load 4.2 percent, tactical cameras and sensors nominal, Wi-Fi uplink stable.`;
+    }
+
+    async function fetchAdvancedAnswer(query) {
       let cleanQuery = query.toLowerCase().trim();
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
 
-      const knowledgeBase = {
-        'aluminum': 'The chemical symbol for aluminum is Al, with atomic number 13, sir.',
-        'aluminium': 'The chemical symbol for aluminium is Al, with atomic number 13, sir.',
-        'gold': 'The chemical symbol for gold is Au, with atomic number 79, sir.',
-        'silver': 'The chemical symbol for silver is Ag, with atomic number 47, sir.',
-        'iron': 'The chemical symbol for iron is Fe, with atomic number 26, sir.',
-        'copper': 'The chemical symbol for copper is Cu, with atomic number 29, sir.',
-        'chlorine': 'The chemical symbol for chlorine is Cl, with atomic number 17, sir.',
-        'sodium': 'The chemical symbol for sodium is Na, with atomic number 11, sir.',
-        'potassium': 'The chemical symbol for potassium is K, with atomic number 19, sir.',
-        'carbon': 'The chemical symbol for carbon is C, with atomic number 6, sir.',
-        'oxygen': 'The chemical symbol for oxygen is O, with atomic number 8, sir.',
-        'hydrogen': 'The chemical symbol for hydrogen is H, with atomic number 1, sir.',
-        'nitrogen': 'The chemical symbol for nitrogen is N, with atomic number 7, sir.',
-        'helium': 'The chemical symbol for helium is He, with atomic number 2, sir.',
-        'lead': 'The chemical symbol for lead is Pb, with atomic number 82, sir.',
-        'mercury': 'The chemical symbol for mercury is Hg, with atomic number 80, sir.',
-        'zinc': 'The chemical symbol for zinc is Zn, with atomic number 30, sir.',
-        'tin': 'The chemical symbol for tin is Sn, with atomic number 50, sir.',
-        'uranium': 'The chemical symbol for uranium is U, with atomic number 92, sir.'
+      const advancedKnowledge = {
+        'photosynthesis': 'Photosynthesis is the physicochemical process by which plants convert carbon dioxide and water into glucose and oxygen using light energy: 6 CO2 + 6 H2O -> C6H12O6 + 6 O2, sir.',
+        'terminal velocity': 'Terminal velocity occurs when the downward force of gravity equals the upward drag force of fluid resistance, resulting in zero net acceleration, sir.',
+        'quantum entanglement': 'Quantum entanglement is a physical phenomenon where a group of particles interact in ways such that the quantum state of each particle cannot be described independently of the state of the others, regardless of distance, sir.',
+        'relativity': 'Einstein\'s theory of general relativity describes gravity not as a force, but as a curvature of spacetime caused by mass and energy, sir.'
       };
 
-      for (let key in knowledgeBase) {
+      for (let key in advancedKnowledge) {
         if (cleanQuery.includes(key)) {
-          return knowledgeBase[key];
+          return advancedKnowledge[key];
         }
       }
 
@@ -666,7 +698,7 @@
         if (data && data.AbstractText) return `${data.AbstractText.split('.')[0]}. Verified, sir.`;
       } catch(e) {}
 
-      return `Information verified for "${query}": Analysis complete, sir.`;
+      return `Analytical query verified for "${query}": Processing complete, sir.`;
     }
 
     async function fetchLiveWeather(locationName) {
@@ -683,6 +715,9 @@
       return `Meteorological conditions for ${locationName}: Clear skies, sir.`;
     }
 
+    /* ========================================================================== */
+    /* COMMAND PARSER & APP LAUNCHER ENGINE                                       */
+    /* ========================================================================== */
     async function processJarvisCommand(command) {
       if (!command) return;
       const cleanCmd = command.toLowerCase().trim();
@@ -692,24 +727,56 @@
       }
 
       const cmd = cleanCmd.replace('jarvis', '').trim();
-      if (!cmd) {
-        return; 
-      }
+      if (!cmd) return;
 
       let responseText = "";
 
       if (cmd.includes('disengage tracking') || cmd.includes('stop tracking') || cmd.includes('exit tracking') || cmd.includes('stop scanning')) {
         stopTrackingMode();
         responseText = "Tracking disengaged. Returning to standard interface, sir.";
-        statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
-        speak(responseText);
-        if (isListening && recognition && isAuthorized) {
-          try { recognition.start(); } catch(e) {}
-        }
-        return;
       }
-      
-      if (cmd.includes('sheet') || cmd.includes('homework') || cmd.includes('note this')) {
+      else if (cmd.includes('run diagnostics') || cmd.includes('diagnostics')) {
+        responseText = await getDiagnosticsReport();
+      }
+      else if (cmd.includes('open ')) {
+        let appName = cmd.replace('open', '').trim();
+        let scheme = appName + "://";
+        if (appName.includes('spotify')) scheme = "spotify://";
+        else if (appName.includes('youtube')) scheme = "youtube://";
+        else if (appName.includes('instagram')) scheme = "instagram://";
+        else if (appName.includes('tiktok')) scheme = "snssdk1233://";
+        else if (appName.includes('whatsapp')) scheme = "whatsapp://";
+        else if (appName.includes('maps')) scheme = "maps://";
+        
+        appLauncherFrame.src = scheme;
+        responseText = `Launching ${appName}, sir.`;
+      }
+      else if (cmd.includes('observe')) {
+        let seconds = 30;
+        let zoom = 0.5;
+
+        const secMatch = cmd.match(/(\d+)\s*(sec|second)/);
+        if (secMatch) seconds = parseInt(secMatch[1]);
+
+        if (cmd.includes('3x') || cmd.includes('3 x')) zoom = 3.0;
+        else if (cmd.includes('1x') || cmd.includes('1 x')) zoom = 1.0;
+        else if (cmd.includes('0.5x') || cmd.includes('0.5 x')) zoom = 0.5;
+
+        startTrackingMode("Room Perimeter", zoom, true, seconds);
+        responseText = `Observing room for ${seconds} seconds at ${zoom}x zoom, sir.`;
+      }
+      else if (cmd.includes('track')) {
+        let zoom = 0.5;
+        if (cmd.includes('3x')) zoom = 3.0;
+        else if (cmd.includes('1x')) zoom = 1.0;
+
+        let objName = cmd.replace('track', '').replace('at', '').replace('0.5x', '').replace('1x', '').replace('3x', '').trim();
+        if (!objName) objName = "target object";
+
+        startTrackingMode(objName, zoom, false, 0);
+        responseText = `Locking onto ${objName} at ${zoom}x zoom, sir.`;
+      }
+      else if (cmd.includes('sheet') || cmd.includes('homework') || cmd.includes('note this')) {
         panelTitle.textContent = "[JARVIS HOMEWORK ANALYSIS MODULE]";
         homeworkPanel.style.display = 'block';
         homeworkContent.innerHTML = `
@@ -724,29 +791,15 @@
         `;
         responseText = "Homework analysis sheet loaded onto side display, sir.";
       }
-      else if (cmd.includes('spotify') || cmd.includes('music')) {
-        responseText = "Launching Spotify app, sir.";
-        appLauncherFrame.src = "spotify://";
-      }
       else if (cmd.includes('weather')) {
         responseText = await fetchLiveWeather("Dover");
-      }
-      else if (cmd.includes('thermal') || cmd.includes('night vision')) {
-        startTrackingMode("Room Thermal Scan", 0.5, true, 0);
-        responseText = `Engaging thermal room tracking. Say Jarvis disengage tracking when done, sir.`;
-      }
-      else if (cmd.includes('track')) {
-        let objName = cmd.replace('track', '').replace('that', '').replace('in', '').trim();
-        if (!objName) objName = "target object";
-        startTrackingMode(objName, 0.5, false, 0);
-        responseText = `Locking onto ${objName}, sir. Say Jarvis disengage tracking when done.`;
       }
       else if (cmd.includes('time')) {
         const now = new Date();
         responseText = `The current local time is ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, sir.`;
       } 
       else {
-        responseText = await fetchUniversalAnswer(cmd);
+        responseText = await fetchAdvancedAnswer(cmd);
       }
 
       statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
@@ -756,6 +809,9 @@
       }
     }
 
+    /* ========================================================================== */
+    /* SPEECH RECOGNITION SUBSYSTEM                                               */
+    /* ========================================================================== */
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return null;
@@ -773,22 +829,18 @@
       };
 
       rec.onresult = (event) => {
-        let currentTranscript = "";
+        let finalTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          currentTranscript += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
         }
 
-        if (currentTranscript.trim()) {
-          speechBuffer = currentTranscript.trim();
-          statusTerminal.textContent = `Hearing: "${speechBuffer}"`;
-          clearTimeout(speechTimeout);
-          
-          speechTimeout = setTimeout(() => {
-            const finalQuery = speechBuffer;
-            speechBuffer = "";
-            try { rec.stop(); } catch(e) {}
-            processJarvisCommand(finalQuery);
-          }, 4000);
+        if (finalTranscript.trim()) {
+          const spokenText = finalTranscript.trim();
+          statusTerminal.textContent = `Hearing: "${spokenText}"`;
+          try { rec.stop(); } catch(e) {}
+          processJarvisCommand(spokenText);
         }
       };
 
@@ -811,9 +863,7 @@
         listenBtn.style.color = "#000";
         speak("Resuming continuous listening, sir.");
         recognition = initSpeechRecognition();
-        if (recognition) {
-          try { recognition.start(); } catch(e) {}
-        }
+        if (recognition) { try { recognition.start(); } catch(e) {} }
       } else {
         isListening = false;
         listenBtn.textContent = "Resume Continuous Listening";

@@ -867,7 +867,7 @@
       }
     }
 
-    // --- CONTINUOUS VOICE RECOGNITION ENGINE ---
+    // --- FIXED SAFARI SPEECH RECOGNITION ENGINE ---
     function initSpeechRecognition() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return null;
@@ -880,12 +880,15 @@
       rec.onstart = () => { isListening = true; };
 
       rec.onresult = (event) => {
-        let finalTranscript = "";
+        let spokenText = "";
+        // Safely extract transcript from Safari/iOS result arrays
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+          if (event.results[i][0] && event.results[i][0].transcript) {
+            spokenText += event.results[i][0].transcript;
+          }
         }
-        if (finalTranscript.trim()) {
-          processJarvisCommand(finalTranscript.trim());
+        if (spokenText.trim() && event.results[event.results.length - 1].isFinal) {
+          processJarvisCommand(spokenText.trim());
         }
       };
 

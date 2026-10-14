@@ -400,8 +400,8 @@
   <iframe id="appLauncherFrame" style="display:none;"></iframe>
 
   <script>
-    // Configured Gemini API Key
-    const GEMINI_API_KEY = "AQ.Ab8RN6KqkEMPywVZgiqXyhR2vHBH1iTWjbEQ88rfUEBYUQ86NQ";
+    // Embedded Key from AI Studio
+    const GEMINI_API_KEY = "AQ.Ab8RN6Kk9iqHFvhdPMIkOvkXjlWvp-s";
 
     // DOM Elements
     const listenBtn = document.getElementById('listenBtn');
@@ -882,7 +882,7 @@
       rec.onresult = (event) => {
         let finalTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) finalTranscript += event.results[0].transcript;
+          if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
         }
         if (finalTranscript.trim()) {
           processJarvisCommand(finalTranscript.trim());

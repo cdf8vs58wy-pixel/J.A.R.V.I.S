@@ -192,7 +192,7 @@
       transform: scaleX(-1);
     }
 
-    #listenBtn {
+    .hud-btn {
       background-color: var(--jarvis-dark);
       color: var(--jarvis-cyan);
       border: 2px solid var(--jarvis-cyan);
@@ -208,8 +208,21 @@
       max-width: 360px;
     }
 
-    #listenBtn:active {
+    .hud-btn:active {
       transform: scale(0.98);
+    }
+
+    .hud-input {
+      background: rgba(0, 20, 15, 0.9);
+      color: var(--jarvis-cyan);
+      border: 1px solid var(--jarvis-cyan);
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 6px;
+      width: 100%;
+      outline: none;
+      margin-bottom: 8px;
     }
 
     .terminal {
@@ -355,9 +368,15 @@
         <div class="inner-ring"></div>
       </div>
 
-      <button id="listenBtn">Tap to Initiate Security Scan</button>
+      <button id="authBtn" class="hud-btn">Tap to Authorize Biometric HUD</button>
 
-      <div class="terminal" id="statusTerminal">System standby. Tap the button above to run biometric facial verification.</div>
+      <!-- TACTICAL TEXT INPUT BRIDGE -->
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Enter query or tactical command...">
+        <button id="sendBtn" class="hud-btn" style="width: auto; padding: 12px 18px; margin: 0;">SEND</button>
+      </div>
+
+      <div class="terminal" id="statusTerminal">System standby. Authorize HUD to unlock tactical terminal.</div>
     </div>
 
     <!-- RIGHT HUD COLUMN (INTEL & HOMEWORK BRIEFINGS) -->
@@ -377,7 +396,7 @@
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:10px;">
           <div>CORE BRAIN: <b style="color:var(--jarvis-neon);">GEMINI-1.5</b></div>
-          <div>AUDIO AUDIO: <b id="audioStatus" style="color:var(--jarvis-cyan);">WHISPER ANALYZER</b></div>
+          <div>AUDIO AUDIO: <b id="audioStatus" style="color:var(--jarvis-cyan);">SYNTHESIZED</b></div>
           <div>FPS MODE: <b style="color:var(--jarvis-neon);">60 FPS HARDWARE</b></div>
           <div>LOCATION: <b style="color:var(--jarvis-cyan);">DOVER, UK</b></div>
         </div>
@@ -400,11 +419,13 @@
   <iframe id="appLauncherFrame" style="display:none;"></iframe>
 
   <script>
-    // Embedded Key from AI Studio
+    // Embedded API Key Config
     const GEMINI_API_KEY = "AQ.Ab8RN6Kk9iqHFvhdPMIkOvkXjlWvp-s";
 
-    // DOM Elements
-    const listenBtn = document.getElementById('listenBtn');
+    // DOM Elements Reference Tree
+    const authBtn = document.getElementById('authBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const tacticalInput = document.getElementById('tacticalInput');
     const statusTerminal = document.getElementById('statusTerminal');
     const intelOutput = document.getElementById('intelOutput');
     const webcam = document.getElementById('webcam');
@@ -420,23 +441,20 @@
     const tacticalVideo = document.getElementById('tacticalVideo');
     const tacticalCanvas = document.getElementById('tacticalCanvas');
     const tacticalTargetStatus = document.getElementById('tacticalTargetStatus');
-    const tacticalZoom = document.getElementById('tacticalZoom');
     const sysModeStatus = document.getElementById('sysModeStatus');
 
-    let recognition = null;
-    let isListening = false;
     let isAuthorized = false;
     let cameraStream = null;
     let userLat = 51.1279; 
     let userLon = 1.3134;
 
-    // Audio Analysis & Sound Synthesizer
+    // Audio Analysis & Sound Synthesizer State
     let audioCtx = null;
     let analyser = null;
     let microphone = null;
     let isWhispering = false;
 
-    // Target Tracking State
+    // Target Tracking State Engine
     let isTrackingActive = false;
     let trackedObjectName = "";
     let trackX = 300, trackY = 200;
@@ -485,7 +503,7 @@
       } catch(e) {}
     }
 
-    // --- INITIALIZATION & TELEMETRY ---
+    // --- INITIALIZATION & TELEMETRY SUBSYSTEM ---
     window.addEventListener('load', async () => {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -533,7 +551,7 @@
       }
     }
 
-    // --- COVERT WHISPER ANALYZER ---
+    // --- COVERT WHISPER ANALYZER SUBSYSTEM ---
     async function initAudioAnalyser() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -577,15 +595,10 @@
     }
 
     // --- BIOMETRIC SINGLE-USER AUTHENTICATION ---
-    async function startBiometricAuth() {
-      if (isAuthorized) {
-        toggleListeningState();
-        return;
-      }
-
+    authBtn.addEventListener('click', async () => {
       playHudSound('scan');
-      listenBtn.disabled = true;
-      listenBtn.textContent = "Scanning 0.5X Wide Field...";
+      authBtn.disabled = true;
+      authBtn.textContent = "Scanning 0.5X Wide Field...";
       statusTerminal.textContent = "Analyzing facial signature matrix...";
       speak("Scanning face profile.");
 
@@ -614,15 +627,14 @@
       const skinPercentage = (skinPixels / totalPixels) * 100;
 
       if (skinPercentage < 8) {
-        listenBtn.disabled = false;
-        listenBtn.textContent = "Tap to Initiate Security Scan";
+        authBtn.disabled = false;
+        authBtn.textContent = "Tap to Authorize Biometric HUD";
         statusTerminal.textContent = "Security Error: No human face detected in frame. Access Denied.";
         speak("No face detected in frame, sir.");
         return;
       }
 
       let savedSig = localStorage.getItem('jarvis_owner_face');
-      
       if (!savedSig) {
         let ownerSig = { r: currentAvgR, g: currentAvgG, b: currentAvgB, skinPct: skinPercentage };
         localStorage.setItem('jarvis_owner_face', JSON.stringify(ownerSig));
@@ -635,8 +647,8 @@
         let diffSkin = Math.abs(ownerSig.skinPct - skinPercentage);
 
         if (diffR > 35 || diffG > 35 || diffB > 35 || diffSkin > 25) {
-          listenBtn.disabled = false;
-          listenBtn.textContent = "Tap to Initiate Security Scan";
+          authBtn.disabled = false;
+          authBtn.textContent = "Tap to Authorize Biometric HUD";
           statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch.";
           speak("Access denied. Unrecognized facial signature.");
           return;
@@ -655,14 +667,9 @@
 
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir.";
         speak("Face verified. Welcome back, sir.");
-
-        listenBtn.disabled = false;
-        listenBtn.textContent = "Pause Continuous Listening";
-        
-        recognition = initSpeechRecognition();
-        if (recognition) { try { recognition.start(); } catch(e) {} }
+        authBtn.textContent = "SYSTEM FULLY AUTHORIZED";
       }, 4000);
-    }
+    });
 
     // --- TACTICAL TRACKING ENGINE & HUD OVERLAY ---
     async function startTrackingMode(objectName) {
@@ -674,7 +681,6 @@
       
       sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
       tacticalTargetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
-      tacticalZoom.textContent = "0.5X";
       tacticalOverlay.style.display = 'flex';
 
       try {
@@ -752,7 +758,6 @@
           trackY += Math.cos(timestamp * 0.005) * 8;
         }
 
-        // DRAW TACTICAL HUD RETICLE & CORNER TICKS
         canvasCtx.beginPath();
         canvasCtx.arc(trackX, trackY, 55, 0, 2 * Math.PI);
         canvasCtx.strokeStyle = "#39ff14"; 
@@ -761,7 +766,6 @@
 
         canvasCtx.strokeStyle = "#00ffcc";
         canvasCtx.lineWidth = 2;
-        // Crosshair ticks
         canvasCtx.beginPath();
         canvasCtx.moveTo(trackX - 70, trackY); canvasCtx.lineTo(trackX - 45, trackY);
         canvasCtx.moveTo(trackX + 45, trackY); canvasCtx.lineTo(trackX + 70, trackY);
@@ -796,8 +800,11 @@
         const data = await response.json();
         if (data && data.candidates && data.candidates[0].content.parts[0].text) {
           const rawText = data.candidates[0].content.parts[0].text.trim();
-          intelOutput.textContent = rawText; // Direct full text to secondary intel panel
+          intelOutput.textContent = rawText; 
           return rawText;
+        } else if (data.error) {
+          intelOutput.textContent = `API Error: ${data.error.message}`;
+          return "API error encountered, sir.";
         }
       } catch(e) {}
 
@@ -819,18 +826,16 @@
       return `Diagnostics complete, sir. System battery is at ${batteryPct}, running on ${chargingStatus}. CPU load 4.2 percent, tactical sensors nominal, uplink stable.`;
     }
 
-    // --- COMMAND PARSER & DEEP LINKS ---
+    // --- COMMAND PARSER & EXECUTION ---
     async function processJarvisCommand(command) {
       if (!command) return;
       let cmd = command.toLowerCase().trim();
-
       cmd = cmd.replace(/^jarvis/i, '').replace(/^hey jarvis/i, '').trim();
       if (!cmd) return;
 
       playHudSound('beep');
       let responseText = "";
 
-      // OFFLINE QUICK PARSING FALLBACKS
       if (cmd.includes('disengage') || cmd.includes('stop tracking') || cmd.includes('exit')) {
         stopTrackingMode();
         return;
@@ -862,59 +867,20 @@
 
       statusTerminal.textContent = `User: "${command}"\nJ.A.R.V.I.S.: ${responseText}`;
       speak(responseText);
-      if (isListening && recognition && isAuthorized) {
-        try { recognition.start(); } catch(e) {}
+      tacticalInput.value = "";
+    }
+
+    sendBtn.addEventListener('click', () => {
+      if (!isAuthorized) { alert("Authorize biometric HUD first, sir."); return; }
+      processJarvisCommand(tacticalInput.value);
+    });
+
+    tacticalInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        if (!isAuthorized) { alert("Authorize biometric HUD first, sir."); return; }
+        processJarvisCommand(tacticalInput.value);
       }
-    }
-
-    // --- FIXED SAFARI SPEECH RECOGNITION ENGINE ---
-    function initSpeechRecognition() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) return null;
-
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'en-US';
-
-      rec.onstart = () => { isListening = true; };
-
-      rec.onresult = (event) => {
-        let spokenText = "";
-        // Safely extract transcript from Safari/iOS result arrays
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i][0] && event.results[i][0].transcript) {
-            spokenText += event.results[i][0].transcript;
-          }
-        }
-        if (spokenText.trim() && event.results[event.results.length - 1].isFinal) {
-          processJarvisCommand(spokenText.trim());
-        }
-      };
-
-      rec.onend = () => {
-        if (isListening && isAuthorized) {
-          setTimeout(() => { try { rec.start(); } catch(e) {} }, 300);
-        }
-      };
-
-      return rec;
-    }
-
-    function toggleListeningState() {
-      if (!isListening) {
-        isListening = true;
-        listenBtn.textContent = "Pause Continuous Listening";
-        recognition = initSpeechRecognition();
-        if (recognition) { try { recognition.start(); } catch(e) {} }
-      } else {
-        isListening = false;
-        listenBtn.textContent = "Resume Continuous Listening";
-        if (recognition) { try { recognition.stop(); } catch(e) {} }
-      }
-    }
-
-    listenBtn.addEventListener('click', startBiometricAuth);
+    });
   </script>
 </body>
 </html>

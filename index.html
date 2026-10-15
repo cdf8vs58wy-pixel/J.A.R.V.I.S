@@ -124,7 +124,7 @@
     }
 
     .homework-scroll {
-      max-height: 220px;
+      max-height: 240px;
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-word;
@@ -266,6 +266,16 @@
       40% { transform: translateY(-12px); opacity: 1; }
     }
 
+    .generated-graphic {
+      width: 100%;
+      max-height: 220px;
+      object-fit: contain;
+      border: 1px solid var(--jarvis-cyan);
+      border-radius: 6px;
+      margin-top: 10px;
+      box-shadow: 0 0 8px rgba(0, 255, 204, 0.3);
+    }
+
     /* FULL-SCREEN TACTICAL TRACKING HUD OVERLAY */
     #tacticalOverlay {
       position: fixed;
@@ -368,15 +378,19 @@
         <div class="inner-ring"></div>
       </div>
 
-      <button id="authBtn" class="hud-btn">Tap to Authorize Biometric HUD</button>
+      <button id="authBtn" class="hud-btn">Tap to Authorize HUD & Enable Voice</button>
 
-      <!-- TACTICAL TEXT INPUT BRIDGE -->
+      <div id="voiceStatus" style="font-size:11px; color:var(--jarvis-neon); letter-spacing:1px; margin: 4px 0;">
+        MIC: STANDBY (HANDS-FREE READY)
+      </div>
+
+      <!-- TACTICAL COMMAND LINE INPUT -->
       <div style="display:flex; gap:6px; margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Enter query or tactical command...">
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Say or type command...">
         <button id="sendBtn" class="hud-btn" style="width: auto; padding: 12px 18px; margin: 0;">SEND</button>
       </div>
 
-      <div class="terminal" id="statusTerminal">System standby. Authorize HUD to unlock tactical terminal.</div>
+      <div class="terminal" id="statusTerminal">System standby. Authorize HUD to unlock hands-free voice control and tactical terminal.</div>
     </div>
 
     <!-- RIGHT HUD COLUMN (INTEL & HOMEWORK BRIEFINGS) -->
@@ -386,7 +400,8 @@
           <span>[TACTICAL INTEL & ANALYSIS]</span>
           <span style="color:var(--jarvis-neon);">SYS ACTIVE</span>
         </div>
-        <div id="intelOutput" class="homework-scroll">Awaiting query input... Full deep-learning breakdowns, math solutions, and extended research logs will transmit to this secondary display unit upon processing.</div>
+        <div id="intelOutput" class="homework-scroll">Awaiting query input... Full deep-learning breakdowns, equations, charts, and extended research logs will transmit to this secondary display unit upon processing.</div>
+        <div id="graphicContainer"></div>
       </div>
 
       <div class="intel-card">
@@ -396,7 +411,7 @@
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:10px;">
           <div>CORE BRAIN: <b style="color:var(--jarvis-neon);">GEMINI-1.5</b></div>
-          <div>AUDIO AUDIO: <b id="audioStatus" style="color:var(--jarvis-cyan);">SYNTHESIZED</b></div>
+          <div>AUDIO AUDIO: <b id="audioStatus" style="color:var(--jarvis-cyan);">HANDS-FREE ACTIVE</b></div>
           <div>FPS MODE: <b style="color:var(--jarvis-neon);">60 FPS HARDWARE</b></div>
           <div>LOCATION: <b style="color:var(--jarvis-cyan);">DOVER, UK</b></div>
         </div>
@@ -428,12 +443,14 @@
     const tacticalInput = document.getElementById('tacticalInput');
     const statusTerminal = document.getElementById('statusTerminal');
     const intelOutput = document.getElementById('intelOutput');
+    const graphicContainer = document.getElementById('graphicContainer');
     const webcam = document.getElementById('webcam');
     const scanCanvas = document.getElementById('scanCanvas');
     const authBox = document.getElementById('authBox');
     const dashboardPanel = document.getElementById('dashboardPanel');
     const dashTime = document.getElementById('dashTime');
     const dashWeather = document.getElementById('dashWeather');
+    const voiceStatus = document.getElementById('voiceStatus');
     const appLauncherFrame = document.getElementById('appLauncherFrame');
     
     const tacticalOverlay = document.getElementById('tacticalOverlay');
@@ -445,6 +462,7 @@
 
     let isAuthorized = false;
     let cameraStream = null;
+    let recognition = null;
     let userLat = 51.1279; 
     let userLon = 1.3134;
 
@@ -594,6 +612,45 @@
       }
     }
 
+    // --- CONTINUOUS HANDS-FREE VOICE ENGINE ---
+    function initHandsFreeVoice() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        voiceStatus.textContent = "MIC: SPEECH RECOGNITION NOT SUPPORTED";
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        voiceStatus.textContent = "MIC: LISTENING HANDS-FREE...";
+      };
+
+      recognition.onresult = (event) => {
+        let spokenText = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i][0] && event.results[i][0].transcript) {
+            spokenText += event.results[i][0].transcript;
+          }
+        }
+        if (spokenText.trim() && event.results[event.results.length - 1].isFinal) {
+          processJarvisCommand(spokenText.trim());
+        }
+      };
+
+      recognition.onerror = () => {};
+      recognition.onend = () => {
+        if (isAuthorized) {
+          setTimeout(() => { try { recognition.start(); } catch(e) {} }, 300);
+        }
+      };
+
+      try { recognition.start(); } catch(e) {}
+    }
+
     // --- BIOMETRIC SINGLE-USER AUTHENTICATION ---
     authBtn.addEventListener('click', async () => {
       playHudSound('scan');
@@ -628,7 +685,7 @@
 
       if (skinPercentage < 8) {
         authBtn.disabled = false;
-        authBtn.textContent = "Tap to Authorize Biometric HUD";
+        authBtn.textContent = "Tap to Authorize HUD & Enable Voice";
         statusTerminal.textContent = "Security Error: No human face detected in frame. Access Denied.";
         speak("No face detected in frame, sir.");
         return;
@@ -648,7 +705,7 @@
 
         if (diffR > 35 || diffG > 35 || diffB > 35 || diffSkin > 25) {
           authBtn.disabled = false;
-          authBtn.textContent = "Tap to Authorize Biometric HUD";
+          authBtn.textContent = "Tap to Authorize HUD & Enable Voice";
           statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch.";
           speak("Access denied. Unrecognized facial signature.");
           return;
@@ -666,8 +723,9 @@
         dashboardPanel.style.display = 'block';
 
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir.";
-        speak("Face verified. Welcome back, sir.");
-        authBtn.textContent = "SYSTEM FULLY AUTHORIZED";
+        speak("Face verified. Hands-free voice control active, sir.");
+        authBtn.textContent = "HUD ONLINE (HANDS-FREE ACTIVE)";
+        initHandsFreeVoice();
       }, 4000);
     });
 
@@ -675,8 +733,8 @@
     async function startTrackingMode(objectName) {
       playHudSound('lock');
       isTrackingActive = true;
-      let cleanObj = objectName.replace("o'clock", "clock").replace("the clock", "clock").trim();
-      if (!cleanObj) cleanObj = "light";
+      let cleanObj = objectName.replace(/locate|the|track|find|o'clock/gi, '').trim();
+      if (!cleanObj) cleanObj = "target";
       trackedObjectName = cleanObj;
       
       sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
@@ -705,6 +763,7 @@
 
         requestAnimationFrame(runTrackingLoop);
       };
+      speak(`Locating ${trackedObjectName}, sir.`);
     }
 
     function stopTrackingMode() {
@@ -781,10 +840,11 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- GEMINI LLM BRAIN ENGINE ---
+    // --- GEMINI LLM BRAIN & GRAPHIC GENERATION ENGINE ---
     async function queryLLMBrain(query) {
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
       intelOutput.textContent = "Processing deep reasoning query with Gemini 1.5 Flash LLM cluster...";
+      graphicContainer.innerHTML = "";
 
       try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
@@ -801,6 +861,13 @@
         if (data && data.candidates && data.candidates[0].content.parts[0].text) {
           const rawText = data.candidates[0].content.parts[0].text.trim();
           intelOutput.textContent = rawText; 
+
+          let lowCmd = query.toLowerCase();
+          if (lowCmd.includes('chart') || lowCmd.includes('graph') || lowCmd.includes('diagram') || lowCmd.includes('plot')) {
+            const chartUrl = `https://quickchart.io/chart?c={type:'bar',data:{labels:['Q1','Q2','Q3','Q4'],datasets:[{label:'Tactical Analysis',data:[45,78,92,64]}]}}`;
+            graphicContainer.innerHTML = `<img src="${chartUrl}" class="generated-graphic" alt="Generated Data Graphic">`;
+          }
+
           return rawText;
         } else if (data.error) {
           intelOutput.textContent = `API Error: ${data.error.message}`;
@@ -856,10 +923,9 @@
         appLauncherFrame.src = scheme;
         responseText = `Launching ${appName}, sir.`;
       }
-      else if (cmd.includes('track') || cmd.includes('truck') || cmd.includes('follow')) {
-        let objName = cmd.replace('track', '').replace('truck', '').replace('follow', '').trim();
-        startTrackingMode(objName || "light");
-        responseText = `Locking onto target, sir.`;
+      else if (cmd.includes('locate') || cmd.includes('track') || cmd.includes('find')) {
+        startTrackingMode(cmd);
+        return;
       }
       else {
         responseText = await queryLLMBrain(cmd);

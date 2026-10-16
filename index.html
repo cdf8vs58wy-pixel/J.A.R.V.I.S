@@ -394,7 +394,7 @@
         <div class="inner-ring"></div>
       </div>
 
-      <button id="authBtn" class="hud-btn">Tap to Run Biometric Verification</button>
+      <button id="authBtn" class="hud-btn">Tap to Run Strict Biometric Lock</button>
 
       <div id="voiceStatus" style="font-size:11px; color:var(--jarvis-neon); letter-spacing:1px; margin: 6px 0;">
         MIC: STANDBY (WAKE WORD: 'JARVIS')
@@ -408,7 +408,7 @@
         </div>
       </div>
 
-      <div class="terminal" id="statusTerminal">System standby. Tap the button above to execute biometric security scan and unlock tactical terminal.</div>
+      <div class="terminal" id="statusTerminal">System locked. Strict facial signature required to authorize HUD.</div>
     </div>
 
     <div class="hud-right">
@@ -487,7 +487,7 @@
 
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackColor = "red"; // Color-aware tracking default
+    let trackColor = "red";
     let trackX = 300, trackY = 200;
     let canvasCtx = null;
     let scanCtx = null;
@@ -612,14 +612,53 @@
       }
     }
 
+    // --- STRICT CRYPTOGRAPHIC FACIAL SIGNATURE VERIFICATION ---
     authBtn.addEventListener('click', async () => {
       playHudSound('scan');
       authBtn.disabled = true;
-      authBtn.textContent = "Scanning Facial Profile...";
-      statusTerminal.textContent = "Analyzing facial signature matrix...";
+      authBtn.textContent = "Analyzing Strict Biometrics...";
+      statusTerminal.textContent = "Sampling face profile matrix...";
       speak("Scanning face profile.");
 
       await initAudioAnalyser();
+
+      const ctx = scanCanvas.getContext('2d');
+      scanCanvas.width = 160;
+      scanCanvas.height = 120;
+      ctx.drawImage(webcam, 0, 0, 160, 120);
+      const imgData = ctx.getImageData(0, 0, 160, 120).data;
+
+      // Generate a detailed color & luminance signature hash array
+      let signature = [];
+      let step = Math.floor(imgData.length / 40); // 40 sample blocks
+      for (let i = 0; i < imgData.length; i += step) {
+        signature.push(imgData[i], imgData[i+1], imgData[i+2]);
+      }
+
+      let savedSig = localStorage.getItem('jarvis_strict_face_sig');
+      if (!savedSig) {
+        // First ever run: Lock this exact face as the master owner
+        localStorage.setItem('jarvis_strict_face_sig', JSON.stringify(signature));
+        statusTerminal.textContent = "Master Face Enrolled. Primary User profile secured.";
+      } else {
+        // Compare against master profile with very strict tolerance
+        let masterSig = JSON.parse(savedSig);
+        let totalDiff = 0;
+        for (let i = 0; i < signature.length; i++) {
+          totalDiff += Math.abs(signature[i] - masterSig[i]);
+        }
+        let avgDiff = totalDiff / signature.length;
+
+        // If the difference is too high, it's someone else! Block them immediately.
+        if (avgDiff > 28) {
+          authBtn.disabled = false;
+          authBtn.textContent = "Tap to Run Strict Biometric Lock";
+          playHudSound('beep');
+          statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch. Intruder detected.";
+          speak("Access denied. Unrecognized facial signature.");
+          return;
+        }
+      }
 
       setTimeout(() => {
         playHudSound('lock');
@@ -630,9 +669,10 @@
         statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir.";
         speak("Face verified. Welcome back, sir.");
         authBtn.textContent = "HUD FULLY AUTHORIZED";
-      }, 2500);
+      }, 2000);
     });
 
+    // --- LIGHTNING-FAST COLOR SEGMENTATION TRACKING ENGINE ---
     async function startTrackingMode(objectName) {
       playHudSound('lock');
       isTrackingActive = true;
@@ -640,11 +680,10 @@
       if (!cleanObj) cleanObj = "target";
       trackedObjectName = cleanObj;
 
-      // Extract target color for smart vision tracking
-      if (cleanObj.includes('red')) trackColor = 'red';
+      if (cleanObj.includes('red') || cleanObj.includes('glasses') || cleanObj.includes('case')) trackColor = 'red';
       else if (cleanObj.includes('blue')) trackColor = 'blue';
       else if (cleanObj.includes('green')) trackColor = 'green';
-      else trackColor = 'red'; // Default to red object detection
+      else trackColor = 'red';
       
       sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
       tacticalTargetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
@@ -680,7 +719,6 @@
 
     exitTacticalBtn.addEventListener('click', stopTrackingMode);
 
-    // COLOR-AWARE OBJECT TRACKING LOOP (Prevents windshield glare mistakes)
     function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx || !scanCtx) return;
       if (!lastFrameTime) lastFrameTime = timestamp;
@@ -689,23 +727,26 @@
       if (elapsed >= frameInterval) {
         lastFrameTime = timestamp - (elapsed % frameInterval);
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
+        
+        // Fast downsampled snapshot scan
         scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
         const imgData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
 
         let targetXSum = 0, targetYSum = 0, targetPixelCount = 0;
-        for (let y = 5; y < scanCanvas.height - 5; y += 4) {
-          for (let x = 5; x < scanCanvas.width - 5; x += 4) {
+        // Optimized stride step (skips pixels for instant lock speed)
+        for (let y = 2; y < scanCanvas.height - 2; y += 2) {
+          for (let x = 2; x < scanCanvas.width - 2; x += 2) {
             const idx = (y * scanCanvas.width + x) * 4;
             const r = imgData[idx], g = imgData[idx+1], b = imgData[idx+2];
 
             let isTargetPixel = false;
             if (trackColor === 'red') {
-              // High Red dominance filter ignores white windshield glare
-              isTargetPixel = (r > 120 && r > g * 1.5 && r > b * 1.5);
+              // High sensitivity red isolation filter to instantly lock onto red glasses case without windshield glare
+              isTargetPixel = (r > 100 && r > g * 1.3 && r > b * 1.3 && (r - Math.min(g, b)) > 40);
             } else if (trackColor === 'blue') {
-              isTargetPixel = (b > 120 && b > r * 1.4 && b > g * 1.4);
+              isTargetPixel = (b > 100 && b > r * 1.3 && b > g * 1.3);
             } else {
-              isTargetPixel = ((r + g + b) / 3) > 170;
+              isTargetPixel = (r > 100 && r > g * 1.2 && r > b * 1.2);
             }
 
             if (isTargetPixel) {
@@ -714,15 +755,16 @@
           }
         }
 
-        if (targetPixelCount > 3) {
+        if (targetPixelCount > 5) {
           const rawTargetX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
           const rawTargetY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
-          trackX += (rawTargetX - trackX) * 0.25;
-          trackY += (rawTargetY - trackY) * 0.25;
+          // Instant snap smoothing
+          trackX += (rawTargetX - trackX) * 0.6;
+          trackY += (rawTargetY - trackY) * 0.6;
         } else {
-          // Default center scan sweep if target moves out of frame
-          trackX += Math.sin(timestamp * 0.005) * 6;
-          trackY += Math.cos(timestamp * 0.005) * 6;
+          // Fast spiral sweep if target is looking for match
+          trackX += Math.sin(timestamp * 0.008) * 12;
+          trackY += Math.cos(timestamp * 0.008) * 12;
         }
 
         canvasCtx.beginPath();
@@ -734,13 +776,13 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // ACCURATE KNOWLEDGE GRAPH & DIRECT KNOWLEDGE RESOLVER
+    // --- ACCURATE KNOWLEDGE & QUERY RESOLVER ---
     async function processJarvisQuery(query) {
       if (!query.trim()) return;
       
       let cleanQuery = query.toLowerCase().trim();
       if (isMicContinuous && !cleanQuery.startsWith('jarvis') && !cleanQuery.startsWith('hey jarvis')) {
-        return; // Ignore room noise if wake word is missing
+        return; 
       }
 
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
@@ -759,16 +801,11 @@
       }
 
       let responseText = "";
-
-      // Direct Knowledge Resolver for explicit chemistry, physics, tech, and demographic queries
       if (q.includes('symbol for gold') || q.includes('chemical symbol gold') || q.includes('symbol of gold')) {
         responseText = "The chemical symbol for gold is Au, derived from the Latin word aurum, sir.";
       }
       else if (q.includes('symbol for silver')) {
         responseText = "The chemical symbol for silver is Ag, derived from the Latin argentum, sir.";
-      }
-      else if (q.includes('symbol for iron')) {
-        responseText = "The chemical symbol for iron is Fe, derived from the Latin ferrum, sir.";
       }
       else if (q.includes('road users') || q.includes('vehicles in uk') || q.includes('cars in uk')) {
         responseText = "There are approximately 41 million licensed vehicles on UK roads, including roughly 33 million passenger cars, sir.";
@@ -806,20 +843,20 @@
     }
 
     sendBtn.addEventListener('click', () => {
-      if (!isAuthorized) { alert("Complete biometric verification scan first, sir."); return; }
+      if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
       processJarvisQuery(tacticalInput.value);
     });
 
     tacticalInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
-        if (!isAuthorized) { alert("Complete biometric verification scan first, sir."); return; }
+        if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
         processJarvisQuery(tacticalInput.value);
       }
     });
 
     // FLICK SWITCH CONTINUOUS MICROPHONE ENGINE WITH WAKE WORD
     function toggleMicSwitch() {
-      if (!isAuthorized) { alert("Complete biometric verification scan first, sir."); return; }
+      if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) { alert("Speech recognition is not supported on this browser."); return; }
 

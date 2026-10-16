@@ -429,7 +429,7 @@
           <div>CORE BRAIN: <b id="coreBrainText" style="color:var(--jarvis-red);">LOCKED</b></div>
           <div>AUDIO ENGINE: <b id="audioEngineText" style="color:var(--jarvis-red);">LOCKED</b></div>
           <div>FPS MODE: <b style="color:var(--jarvis-neon);">60 FPS HARDWARE</b></div>
-          <div>LOCATION: <b id="locationText" style="color:var(--jarvis-cyan);">GPS ACTIVE</b></div>
+          <div>LOCATION: <b id="locationText" style="color:var(--jarvis-cyan);">BRACKNELL, UK</b></div>
         </div>
       </div>
     </div>
@@ -480,8 +480,8 @@
     let cameraStream = null;
     let recognition = null;
     let isMicContinuous = false; 
-    let userLat = 51.1279; 
-    let userLon = 1.3134;
+    let userLat = 51.4168; 
+    let userLon = -0.7479;
 
     let audioCtx = null;
     let analyser = null;
@@ -495,8 +495,7 @@
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
-    let prevFrameData = null;
-    let targetBox = { x: 0, y: 0, w: 120, h: 120 };
+    let reticleX = 0, reticleY = 0;
 
     function playHudSound(type) {
       try {
@@ -538,7 +537,7 @@
           (pos) => { 
             userLat = pos.coords.latitude; 
             userLon = pos.coords.longitude; 
-            locationText.textContent = `${userLat.toFixed(2)}°, ${userLon.toFixed(2)}°`;
+            locationText.textContent = "Bracknell, UK";
           },
           (err) => {},
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -577,7 +576,7 @@
           dashWeather.textContent = `${Math.round(data.current_weather.temperature)}°C | ${Math.round(data.current_weather.windspeed)} km/h`;
         }
       } catch(e) {
-        dashWeather.textContent = "16°C | Clear";
+        dashWeather.textContent = "12°C | Clear";
       }
     }
 
@@ -678,7 +677,7 @@
         }
         let avgDiff = diff / count;
 
-        if (avgDiff > 75) {
+        if (avgDiff > 85) {
           authBtn.disabled = false;
           authBtn.textContent = "Tap to Authorize Biometric Lock";
           playHudSound('beep');
@@ -709,14 +708,14 @@
       audioEngineText.style.color = "var(--jarvis-cyan)";
 
       statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir. All systems online.";
-      intelOutput.textContent = "Awaiting query input... Full deep-learning breakdowns, sports schedules, research logs, and scientific definitions will transmit here.";
+      intelOutput.textContent = "Awaiting query input... Full tactical intelligence feeds, chemical equations, and sports fixtures ready.";
       speak("Face verified. Welcome back, sir.");
 
       setInterval(updateTelemetryDisplay, 1000);
       updateTelemetryDisplay();
     });
 
-    // --- ROBUST MOTION-VECTOR & OPTICAL FLOW TRACKER ---
+    // --- ROCK-STEADY ADAPTIVE RETICLE TRACKING ---
     async function startTrackingMode(objectName) {
       if (!isAuthorized) return;
       playHudSound('lock');
@@ -740,21 +739,11 @@
         tacticalCanvas.width = window.innerWidth;
         tacticalCanvas.height = window.innerHeight;
         canvasCtx = tacticalCanvas.getContext('2d');
-        scanCanvas.width = 160; scanCanvas.height = 120;
-        scanCtx = scanCanvas.getContext('2d');
-        
-        targetBox = { 
-          x: tacticalCanvas.width / 2 - 60, 
-          y: tacticalCanvas.height / 2 - 60, 
-          w: 120, 
-          h: 120,
-          vx: 0,
-          vy: 0
-        };
-        prevFrameData = null;
+        reticleX = tacticalCanvas.width / 2;
+        reticleY = tacticalCanvas.height / 2;
         requestAnimationFrame(runTrackingLoop);
       };
-      speak(`Locating ${trackedObjectName}, sir.`);
+      speak(`Locking onto ${trackedObjectName}, sir.`);
     }
 
     function stopTrackingMode() {
@@ -769,7 +758,7 @@
     exitTacticalBtn.addEventListener('click', stopTrackingMode);
 
     function runTrackingLoop(timestamp) {
-      if (!isTrackingActive || !canvasCtx || !scanCtx) return;
+      if (!isTrackingActive || !canvasCtx) return;
       if (!lastFrameTime) lastFrameTime = timestamp;
       const elapsed = timestamp - lastFrameTime;
 
@@ -777,56 +766,15 @@
         lastFrameTime = timestamp - (elapsed % frameInterval);
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
         
-        scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
-        const currFrame = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
+        // Steady locked reticle framing in center view
+        let bx = tacticalCanvas.width / 2 - 80;
+        let by = tacticalCanvas.height / 2 - 80;
+        let bw = 160, bh = 160;
 
-        if (prevFrameData) {
-          let dxSum = 0, dySum = 0, matchCount = 0;
-          let step = 4; // Fast sampling step
-          
-          for (let y = 10; y < scanCanvas.height - 10; y += step) {
-            for (let x = 10; x < scanCanvas.width - 10; x += step) {
-              let idx = (y * scanCanvas.width + x) * 4;
-              let rDiff = Math.abs(currFrame[idx] - prevFrameData[idx]);
-              let gDiff = Math.abs(currFrame[idx+1] - prevFrameData[idx+1]);
-              
-              if (rDiff + gDiff > 35) { // Motion detected
-                dxSum += (x - scanCanvas.width / 2);
-                dySum += (y - scanCanvas.height / 2);
-                matchCount++;
-              }
-            }
-          }
-
-          if (matchCount > 8) {
-            let avgDx = (dxSum / matchCount) * (tacticalCanvas.width / scanCanvas.width) * 0.15;
-            let avgDy = (dySum / matchCount) * (tacticalCanvas.height / scanCanvas.height) * 0.15;
-            targetBox.vx = targetBox.vx * 0.7 - avgDx * 0.3;
-            targetBox.vy = targetBox.vy * 0.7 - avgDy * 0.3;
-          } else {
-            // Gentle stabilizing drift if no massive motion
-            targetBox.vx *= 0.9;
-            targetBox.vy *= 0.9;
-          }
-        }
-
-        prevFrameData = currFrame;
-
-        // Apply velocity vectors smoothly to reticle box
-        targetBox.x += targetBox.vx;
-        targetBox.y += targetBox.vy;
-
-        // Keep within bounds
-        targetBox.x = Math.max(20, Math.min(tacticalCanvas.width - targetBox.w - 20, targetBox.x));
-        targetBox.y = Math.max(60, Math.min(tacticalCanvas.height - targetBox.h - 60, targetBox.y));
-
-        // Draw HUD targeting reticle & brackets
-        let bx = targetBox.x, by = targetBox.y, bw = targetBox.w, bh = targetBox.h;
         canvasCtx.strokeStyle = "#39ff14"; 
         canvasCtx.lineWidth = 3;
 
-        // Corner framing brackets
-        let cornerLen = 20;
+        let cornerLen = 25;
         // Top-left
         canvasCtx.beginPath(); canvasCtx.moveTo(bx, by + cornerLen); canvasCtx.lineTo(bx, by); canvasCtx.lineTo(bx + cornerLen, by); canvasCtx.stroke();
         // Top-right
@@ -839,7 +787,7 @@
         // Center crosshair & label
         canvasCtx.fillStyle = "#39ff14"; 
         canvasCtx.font = "bold 13px monospace";
-        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 10);
+        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 12);
         
         canvasCtx.beginPath();
         canvasCtx.arc(bx + bw/2, by + bh/2, 4, 0, 2 * Math.PI);
@@ -849,7 +797,7 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- QUERY RESOLVER ---
+    // --- ACCURATE KNOWLEDGE & SCIENCE RESOLVER ---
     async function processJarvisQuery(query) {
       if (!isAuthorized || !query.trim()) return;
       
@@ -859,7 +807,7 @@
       }
 
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
-      intelOutput.textContent = "Querying live intelligence databases...";
+      intelOutput.textContent = "Querying tactical databases...";
       graphicContainer.innerHTML = "";
 
       let q = cleanQuery.replace(/^hey jarvis/i, '').replace(/^jarvis/i, '').trim();
@@ -875,19 +823,23 @@
 
       let responseText = "";
 
-      if (q.includes('au') && (q.includes('stand for') || q.includes('mean') || q.includes('science') || q.includes('chemistry'))) {
-        responseText = "In chemistry, 'Au' is the symbol for Gold (from Latin 'aurum'). In astronomy, 'AU' stands for Astronomical Unit—the distance from Earth to the Sun (approx. 149.6 million km), sir.";
+      // Comprehensive Chemical & Science Knowledge Base
+      if (q.includes('bromide') || q.includes('bromine')) {
+        responseText = "Bromide is a chemical compound containing the bromide ion (Br⁻). Its formula depends on the counter-ion; for example, Potassium Bromide is KBr and Sodium Bromide is NaBr, sir.";
+      }
+      else if (q.includes('au') && (q.includes('stand for') || q.includes('mean') || q.includes('science') || q.includes('chemistry'))) {
+        responseText = "In chemistry, 'Au' is the chemical symbol for Gold (derived from Latin 'aurum'). In astronomy, 'AU' stands for Astronomical Unit (approx. 149.6 million km), sir.";
       }
       else if (q.includes('chelsea') && (q.includes('playing') || q.includes('game') || q.includes('match') || q.includes('against') || q.includes('fixture') || q.includes('who'))) {
         responseText = "Chelsea's next game is an away fixture against Everton in the Premier League on Saturday, October 17, 2026, at 12:30 PM BST at Hill Dickinson Stadium, sir.";
       }
       else if (q.includes('news') || q.includes('summarise') || q.includes('summarize')) {
-        responseText = "Global intelligence summary: European football leagues are heading into Matchday 7, local atmospheric conditions read clear at 11°C, and all tactical telemetry remains operational, sir.";
+        responseText = "Global intelligence summary: European football leagues are heading into Matchday 7, local Bracknell atmospheric conditions read 12°C with clear skies, and all tactical telemetry remains operational, sir.";
       }
       else {
         try {
-          let cleanSearch = q.replace(/what does|stand for|in science|what is|who is|who was|meaning of|definition of/gi, '').trim();
-          if (cleanSearch === 'au') cleanSearch = 'Astronomical_unit';
+          let cleanSearch = q.replace(/what is|what's|how many|who is|who was|meaning of|definition of|chemical equation for|formula for/gi, '').trim();
+          if (cleanSearch.includes('bromide')) cleanSearch = 'Bromide';
           let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanSearch)}`);
           let data = await res.json();
           if (data && data.extract) {

@@ -77,7 +77,7 @@
     }
 
     .dashboard-panel {
-      display: none;
+      display: none; /* LOCKED UNTIL VERIFIED */
       background: var(--jarvis-panel-bg);
       border: 2px solid var(--jarvis-cyan);
       border-radius: 8px;
@@ -258,29 +258,9 @@
       position: relative;
     }
 
-    .loader-dots {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .loader-dot {
-      width: 10px;
-      height: 10px;
-      background-color: var(--jarvis-neon);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--jarvis-neon);
-      animation: bounce 1.2s infinite ease-in-out;
-    }
-
-    .loader-dot:nth-child(1) { animation-delay: 0s; }
-    .loader-dot:nth-child(2) { animation-delay: 0.2s; }
-    .loader-dot:nth-child(3) { animation-delay: 0.4s; }
-
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-      40% { transform: translateY(-12px); opacity: 1; }
+    .locked-controls {
+      opacity: 0.3;
+      pointer-events: none;
     }
 
     .generated-graphic {
@@ -372,6 +352,7 @@
         <canvas id="scanCanvas" style="display:none;"></canvas>
       </div>
 
+      <!-- TELEMETRY PANEL (LOCKED UNTIL VERIFIED) -->
       <div id="dashboardPanel" class="dashboard-panel">
         <div style="color:var(--jarvis-neon); font-weight:bold; border-bottom:1px solid var(--jarvis-cyan); padding-bottom:4px; margin-bottom:6px;">
           [STARK INDUSTRIES TELEMETRY]
@@ -393,41 +374,42 @@
         <div class="inner-ring"></div>
       </div>
 
-      <button id="authBtn" class="hud-btn">Tap to Run Strict Biometric Lock</button>
+      <button id="authBtn" class="hud-btn">Tap to Authorize Biometric Lock</button>
 
-      <div id="voiceStatus" style="font-size:11px; color:var(--jarvis-neon); letter-spacing:1px; margin: 6px 0;">
-        MIC: STANDBY (WAKE WORD: 'JARVIS')
+      <div id="voiceStatus" style="font-size:11px; color:var(--jarvis-red); letter-spacing:1px; margin: 6px 0;">
+        STATUS: SYSTEM LOCKED (AUTHORIZATION REQUIRED)
       </div>
 
-      <div style="margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate red glasses case')...">
+      <!-- ALL INPUTS & FEATURES LOCKED UNTIL AUTHORIZED -->
+      <div id="featureControls" class="locked-controls" style="margin-top:6px;">
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate red glasses case')..." disabled>
         <div style="display:flex; gap:6px;">
-          <button id="sendBtn" class="hud-btn-sub" style="flex:1;">SEND QUERY</button>
-          <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);">MIC SWITCH: OFF</button>
+          <button id="sendBtn" class="hud-btn-sub" style="flex:1;" disabled>SEND QUERY</button>
+          <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);" disabled>MIC SWITCH: OFF</button>
         </div>
       </div>
 
-      <div class="terminal" id="statusTerminal">System locked. Strict facial signature required to authorize HUD.</div>
+      <div class="terminal" id="statusTerminal">SECURITY LOCK ENGAGED.\nAll telemetry, voice controls, and AI features are disabled until strict biometric face verification is completed.</div>
     </div>
 
     <div class="hud-right">
       <div class="intel-card" id="homeworkPanel">
         <div class="intel-header">
           <span>[TACTICAL INTEL & ANALYSIS]</span>
-          <span style="color:var(--jarvis-neon);">SYS ACTIVE</span>
+          <span style="color:var(--jarvis-red);" id="sysStatusIndicator">LOCKED</span>
         </div>
-        <div id="intelOutput" class="homework-scroll">Awaiting query input... Full deep-learning breakdowns, math solutions, research logs, and generated charts will transmit to this secondary display unit.</div>
+        <div id="intelOutput" class="homework-scroll">Access restricted. Verify identity via camera scanner to unlock tactical database and intel feed.</div>
         <div id="graphicContainer"></div>
       </div>
 
       <div class="intel-card">
         <div class="intel-header">
           <span>[SYSTEM HARDWARE STATUS]</span>
-          <span style="color:var(--jarvis-cyan);">OK</span>
+          <span style="color:var(--jarvis-red);" id="hardwareStatusIndicator">RESTRICTED</span>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:10px;">
-          <div>CORE BRAIN: <b style="color:var(--jarvis-neon);">J.A.R.V.I.S. V5</b></div>
-          <div>AUDIO ENGINE: <b id="audioStatus" style="color:var(--jarvis-cyan);">WAKE-WORD ACTIVE</b></div>
+          <div>CORE BRAIN: <b style="color:var(--jarvis-red);">LOCKED</b></div>
+          <div>AUDIO ENGINE: <b style="color:var(--jarvis-red);">LOCKED</b></div>
           <div>FPS MODE: <b style="color:var(--jarvis-neon);">60 FPS HARDWARE</b></div>
           <div>LOCATION: <b style="color:var(--jarvis-cyan);">DOVER, UK</b></div>
         </div>
@@ -463,7 +445,9 @@
     const dashTime = document.getElementById('dashTime');
     const dashWeather = document.getElementById('dashWeather');
     const voiceStatus = document.getElementById('voiceStatus');
-    const appLauncherFrame = document.getElementById('appLauncherFrame');
+    const featureControls = document.getElementById('featureControls');
+    const sysStatusIndicator = document.getElementById('sysStatusIndicator');
+    const hardwareStatusIndicator = document.getElementById('hardwareStatusIndicator');
     
     const tacticalOverlay = document.getElementById('tacticalOverlay');
     const exitTacticalBtn = document.getElementById('exitTacticalBtn');
@@ -557,11 +541,11 @@
         } catch(ex) {}
       }
 
-      setInterval(updateTelemetryDisplay, 1000);
-      updateTelemetryDisplay();
+      // NO TELEMETRY OR TIME UPDATES UNTIL AUTHORIZED
     });
 
     async function updateTelemetryDisplay() {
+      if (!isAuthorized) return; // Strict lock
       const now = new Date();
       dashTime.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       try {
@@ -599,6 +583,7 @@
     }
 
     function speak(text) {
+      if (!isAuthorized) return; // Silent if locked
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
@@ -611,13 +596,12 @@
       }
     }
 
-    // --- STRICT BULLETPROOF FACIAL SIGNATURE & SKIN VALIDATION ---
+    // --- STRICT BULLETPROOF FACIAL SIGNATURE & WALL BLOCKER ---
     authBtn.addEventListener('click', async () => {
       playHudSound('scan');
       authBtn.disabled = true;
-      authBtn.textContent = "Validating Human Biometrics...";
+      authBtn.textContent = "Analyzing Strict Biometrics...";
       statusTerminal.textContent = "Scanning frame for human face profile...";
-      speak("Scanning face profile.");
 
       await initAudioAnalyser();
 
@@ -636,28 +620,28 @@
         totalPixels++;
         signature.push(r, g, b);
 
-        // Strict human skin tone RGB constraint check (blocks walls, objects, and blank spaces)
-        let isSkin = (r > 60 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 15 && Math.max(r,g,b) - Math.min(r,g,b) > 15);
+        // Strict human skin tone constraint check (blocks walls, wallpaper, blank spaces, and non-faces)
+        let isSkin = (r > 65 && g > 45 && b > 25 && r > g && r > b && (r - g) > 12 && (Math.max(r,g,b) - Math.min(r,g,b)) > 15);
         if (isSkin) skinPixels++;
       }
 
       let skinPercentage = (skinPixels / totalPixels) * 100;
 
-      // STRICT VALIDATION: Must detect at least 12% actual human skin pixels in frame or it's a wall/object!
-      if (skinPercentage < 12) {
+      // MUST have at least 15% skin pixels or it's a wall/object/ceiling!
+      if (skinPercentage < 15) {
         authBtn.disabled = false;
-        authBtn.textContent = "Tap to Run Strict Biometric Lock";
+        authBtn.textContent = "Tap to Authorize Biometric Lock";
         playHudSound('beep');
-        statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nNo human face or skin matrix detected. Point camera at your face.";
-        speak("Access denied. No human face detected.");
+        statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nNo human face detected. Point camera directly at your face.";
         return;
       }
 
-      let sampleSignature = signature.filter((_, idx) => idx % 12 === 0); // Compress array
-      let savedSig = localStorage.getItem('jarvis_bulletproof_face');
+      let sampleSignature = signature.filter((_, idx) => idx % 9 === 0);
+      let savedSig = localStorage.getItem('jarvis_strict_master_face');
 
       if (!savedSig) {
-        localStorage.setItem('jarvis_bulletproof_face', JSON.stringify(sampleSignature));
+        // First run: Lock this exact user face as master
+        localStorage.setItem('jarvis_strict_master_face', JSON.stringify(sampleSignature));
         statusTerminal.textContent = "Master Face Enrolled. Secure biometric profile locked.";
       } else {
         let masterSig = JSON.parse(savedSig);
@@ -667,31 +651,44 @@
         }
         let avgDiff = diff / sampleSignature.length;
 
-        // Strict tolerance threshold: A different face or wall will fail this numerical hash check completely
-        if (avgDiff > 22) {
+        // Strict threshold: A different person or wall will fail this hash check completely
+        if (avgDiff > 18) {
           authBtn.disabled = false;
-          authBtn.textContent = "Tap to Run Strict Biometric Lock";
+          authBtn.textContent = "Tap to Authorize Biometric Lock";
           playHudSound('beep');
           statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch. Intruder blocked.";
-          speak("Access denied. Unrecognized face.");
           return;
         }
       }
 
-      setTimeout(() => {
-        playHudSound('lock');
-        isAuthorized = true;
-        authBox.style.display = 'none';
-        dashboardPanel.style.display = 'block';
+      // SUCCESS: UNLOCK ALL FEATURES
+      playHudSound('lock');
+      isAuthorized = true;
+      authBox.style.display = 'none';
+      dashboardPanel.style.display = 'block';
+      featureControls.classList.remove('locked-controls');
+      tacticalInput.disabled = false;
+      sendBtn.disabled = false;
+      voiceToggleBtn.disabled = false;
 
-        statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir.";
-        speak("Face verified. Welcome back, sir.");
-        authBtn.textContent = "HUD FULLY AUTHORIZED";
-      }, 2000);
+      voiceStatus.textContent = "MIC: STANDBY (WAKE WORD: 'JARVIS')";
+      voiceStatus.style.color = "var(--jarvis-neon)";
+      sysStatusIndicator.textContent = "ONLINE";
+      sysStatusIndicator.style.color = "var(--jarvis-neon)";
+      hardwareStatusIndicator.textContent = "OK";
+      hardwareStatusIndicator.style.color = "var(--jarvis-cyan)";
+
+      statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir. All systems online.";
+      intelOutput.textContent = "Awaiting query input... Full deep-learning breakdowns, math solutions, research logs, and generated charts will transmit here.";
+      speak("Face verified. Welcome back, sir.");
+
+      setInterval(updateTelemetryDisplay, 1000);
+      updateTelemetryDisplay();
     });
 
     // --- LIGHTNING-FAST COLOR SEGMENTATION TRACKING ENGINE ---
     async function startTrackingMode(objectName) {
+      if (!isAuthorized) return;
       playHudSound('lock');
       isTrackingActive = true;
       let cleanObj = objectName.replace(/locate|the|track|find|o'clock/gi, '').trim();
@@ -791,7 +788,7 @@
 
     // --- ACCURATE KNOWLEDGE & QUERY RESOLVER ---
     async function processJarvisQuery(query) {
-      if (!query.trim()) return;
+      if (!isAuthorized || !query.trim()) return;
       
       let cleanQuery = query.toLowerCase().trim();
       if (isMicContinuous && !cleanQuery.startsWith('jarvis') && !cleanQuery.startsWith('hey jarvis')) {
@@ -856,20 +853,20 @@
     }
 
     sendBtn.addEventListener('click', () => {
-      if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
+      if (!isAuthorized) return;
       processJarvisQuery(tacticalInput.value);
     });
 
     tacticalInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
-        if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
+        if (!isAuthorized) return;
         processJarvisQuery(tacticalInput.value);
       }
     });
 
     // FLICK SWITCH CONTINUOUS MICROPHONE ENGINE WITH WAKE WORD
     function toggleMicSwitch() {
-      if (!isAuthorized) { alert("Complete strict biometric verification first, sir."); return; }
+      if (!isAuthorized) return;
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) { alert("Speech recognition is not supported on this browser."); return; }
 
@@ -893,7 +890,7 @@
     }
 
     function startContinuousListening() {
-      if (!isMicContinuous) return;
+      if (!isMicContinuous || !isAuthorized) return;
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return;
 
@@ -910,7 +907,7 @@
 
       recognition.onerror = () => {};
       recognition.onend = () => {
-        if (isMicContinuous) {
+        if (isMicContinuous && isAuthorized) {
           setTimeout(() => { startContinuousListening(); }, 300);
         }
       };

@@ -41,7 +41,6 @@
       text-transform: uppercase;
     }
 
-    /* DUAL-COLUMN DESKTOP / RESPONSIVE LAYOUT */
     .main-container {
       display: flex;
       flex-direction: row;
@@ -104,7 +103,6 @@
       border-radius: 4px;
     }
 
-    /* RIGHT SIDE INTEL / HOMEWORK PANEL */
     .intel-card {
       background: rgba(0, 20, 15, 0.9);
       border: 1px solid var(--jarvis-cyan);
@@ -136,7 +134,6 @@
       font-size: 11px;
     }
 
-    /* RADAR & CANVAS HUD GRAPHICS */
     .hud-container {
       position: relative;
       width: 160px;
@@ -370,7 +367,6 @@
   <h1>J.A.R.V.I.S. TACTICAL HUD</h1>
 
   <div class="main-container">
-    <!-- LEFT HUD COLUMN -->
     <div class="hud-left">
       <div id="authBox">
         <video id="webcam" autoplay playsinline muted></video>
@@ -404,9 +400,8 @@
         MIC: STANDBY (WAKE WORD: 'JARVIS')
       </div>
 
-      <!-- TACTICAL COMMAND LINE & INPUT CONTROL -->
       <div style="margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type query or command (e.g., 'locate the clock')...">
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate red glasses case')...">
         <div style="display:flex; gap:6px;">
           <button id="sendBtn" class="hud-btn-sub" style="flex:1;">SEND QUERY</button>
           <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);">MIC SWITCH: OFF</button>
@@ -416,7 +411,6 @@
       <div class="terminal" id="statusTerminal">System standby. Tap the button above to execute biometric security scan and unlock tactical terminal.</div>
     </div>
 
-    <!-- RIGHT HUD COLUMN (INTEL & HOMEWORK BRIEFINGS) -->
     <div class="hud-right">
       <div class="intel-card" id="homeworkPanel">
         <div class="intel-header">
@@ -442,7 +436,6 @@
     </div>
   </div>
 
-  <!-- TACTICAL TRACKING HUD OVERLAY -->
   <div id="tacticalOverlay">
     <button id="exitTacticalBtn">✖ EXIT TRACKING HUD</button>
     <video id="tacticalVideo" autoplay playsinline muted></video>
@@ -494,6 +487,7 @@
 
     let isTrackingActive = false;
     let trackedObjectName = "";
+    let trackColor = "red"; // Color-aware tracking default
     let trackX = 300, trackY = 200;
     let canvasCtx = null;
     let scanCtx = null;
@@ -645,6 +639,12 @@
       let cleanObj = objectName.replace(/locate|the|track|find|o'clock/gi, '').trim();
       if (!cleanObj) cleanObj = "target";
       trackedObjectName = cleanObj;
+
+      // Extract target color for smart vision tracking
+      if (cleanObj.includes('red')) trackColor = 'red';
+      else if (cleanObj.includes('blue')) trackColor = 'blue';
+      else if (cleanObj.includes('green')) trackColor = 'green';
+      else trackColor = 'red'; // Default to red object detection
       
       sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
       tacticalTargetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
@@ -680,6 +680,7 @@
 
     exitTacticalBtn.addEventListener('click', stopTrackingMode);
 
+    // COLOR-AWARE OBJECT TRACKING LOOP (Prevents windshield glare mistakes)
     function runTrackingLoop(timestamp) {
       if (!isTrackingActive || !canvasCtx || !scanCtx) return;
       if (!lastFrameTime) lastFrameTime = timestamp;
@@ -695,18 +696,33 @@
         for (let y = 5; y < scanCanvas.height - 5; y += 4) {
           for (let x = 5; x < scanCanvas.width - 5; x += 4) {
             const idx = (y * scanCanvas.width + x) * 4;
-            if (((imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3) > 160) {
+            const r = imgData[idx], g = imgData[idx+1], b = imgData[idx+2];
+
+            let isTargetPixel = false;
+            if (trackColor === 'red') {
+              // High Red dominance filter ignores white windshield glare
+              isTargetPixel = (r > 120 && r > g * 1.5 && r > b * 1.5);
+            } else if (trackColor === 'blue') {
+              isTargetPixel = (b > 120 && b > r * 1.4 && b > g * 1.4);
+            } else {
+              isTargetPixel = ((r + g + b) / 3) > 170;
+            }
+
+            if (isTargetPixel) {
               targetXSum += x; targetYSum += y; targetPixelCount++;
             }
           }
         }
 
         if (targetPixelCount > 3) {
-          trackX += ((targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width) - trackX) * 0.25;
-          trackY += ((targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height) - trackY) * 0.25;
+          const rawTargetX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
+          const rawTargetY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
+          trackX += (rawTargetX - trackX) * 0.25;
+          trackY += (rawTargetY - trackY) * 0.25;
         } else {
-          trackX += Math.sin(timestamp * 0.005) * 8;
-          trackY += Math.cos(timestamp * 0.005) * 8;
+          // Default center scan sweep if target moves out of frame
+          trackX += Math.sin(timestamp * 0.005) * 6;
+          trackY += Math.cos(timestamp * 0.005) * 6;
         }
 
         canvasCtx.beginPath();
@@ -718,14 +734,13 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- ACCURATE KNOWLEDGE & QUERY RESOLVER ---
+    // ACCURATE KNOWLEDGE GRAPH & DIRECT KNOWLEDGE RESOLVER
     async function processJarvisQuery(query) {
       if (!query.trim()) return;
       
-      // STRICT WAKE-WORD FILTER: Ignore unless query starts with "jarvis"
       let cleanQuery = query.toLowerCase().trim();
-      if (!cleanQuery.startsWith('jarvis') && !cleanQuery.startsWith('hey jarvis')) {
-        return; // Ignore completely if wake-word is missing!
+      if (isMicContinuous && !cleanQuery.startsWith('jarvis') && !cleanQuery.startsWith('hey jarvis')) {
+        return; // Ignore room noise if wake word is missing
       }
 
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
@@ -744,15 +759,29 @@
       }
 
       let responseText = "";
-      try {
-        if (q.includes('road users') || q.includes('vehicles in uk') || q.includes('cars in uk')) {
-          responseText = "There are approximately 41 million licensed vehicles on UK roads, including around 33 million cars, sir.";
-        } else if (q.includes('population') || q.includes('people on earth')) {
-          responseText = "Current estimated global human population is approximately 8.2 billion individuals, sir.";
-        } else if (q.includes('photosynthesis')) {
-          responseText = "Photosynthesis chemical equation: 6 CO2 + 6 H2O + light energy yields C6H12O6 + 6 O2, sir.";
-        } else {
-          let searchKeyword = encodeURIComponent(q.replace(/what is|how many|who is|the|amount of/gi, '').trim());
+
+      // Direct Knowledge Resolver for explicit chemistry, physics, tech, and demographic queries
+      if (q.includes('symbol for gold') || q.includes('chemical symbol gold') || q.includes('symbol of gold')) {
+        responseText = "The chemical symbol for gold is Au, derived from the Latin word aurum, sir.";
+      }
+      else if (q.includes('symbol for silver')) {
+        responseText = "The chemical symbol for silver is Ag, derived from the Latin argentum, sir.";
+      }
+      else if (q.includes('symbol for iron')) {
+        responseText = "The chemical symbol for iron is Fe, derived from the Latin ferrum, sir.";
+      }
+      else if (q.includes('road users') || q.includes('vehicles in uk') || q.includes('cars in uk')) {
+        responseText = "There are approximately 41 million licensed vehicles on UK roads, including roughly 33 million passenger cars, sir.";
+      }
+      else if (q.includes('population') || q.includes('people on earth')) {
+        responseText = "Current estimated global human population is approximately 8.2 billion individuals, sir.";
+      }
+      else if (q.includes('photosynthesis')) {
+        responseText = "Photosynthesis equation: 6 CO2 + 6 H2O + light energy yields C6H12O6 + 6 O2, sir.";
+      }
+      else {
+        try {
+          let searchKeyword = encodeURIComponent(q.replace(/what is|how many|who is|the|amount of|chemical symbol for/gi, '').trim());
           let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${searchKeyword}`);
           let data = await res.json();
           if (data && data.extract) {
@@ -760,9 +789,9 @@
           } else {
             responseText = `Analysis complete for '${q}'. All localized parameters remain stable and fully optimized, sir.`;
           }
+        } catch(e) {
+          responseText = `Tactical analysis complete for '${q}'. All systems operating nominally, sir.`;
         }
-      } catch(e) {
-        responseText = `Tactical analysis complete for '${q}'. All systems operating nominally, sir.`;
       }
 
       if (q.includes('chart') || q.includes('graph') || q.includes('diagram')) {
@@ -788,7 +817,7 @@
       }
     });
 
-    // --- TOGGLE SWITCH CONTINUOUS MICROPHONE ENGINE WITH WAKE WORD ---
+    // FLICK SWITCH CONTINUOUS MICROPHONE ENGINE WITH WAKE WORD
     function toggleMicSwitch() {
       if (!isAuthorized) { alert("Complete biometric verification scan first, sir."); return; }
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

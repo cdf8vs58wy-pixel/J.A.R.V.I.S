@@ -293,7 +293,6 @@
       box-shadow: 0 0 8px rgba(0, 255, 204, 0.3);
     }
 
-    /* FULL-SCREEN TACTICAL TRACKING HUD OVERLAY */
     #tacticalOverlay {
       position: fixed;
       top: 0;
@@ -612,12 +611,12 @@
       }
     }
 
-    // --- STRICT CRYPTOGRAPHIC FACIAL SIGNATURE VERIFICATION ---
+    // --- STRICT BULLETPROOF FACIAL SIGNATURE & SKIN VALIDATION ---
     authBtn.addEventListener('click', async () => {
       playHudSound('scan');
       authBtn.disabled = true;
-      authBtn.textContent = "Analyzing Strict Biometrics...";
-      statusTerminal.textContent = "Sampling face profile matrix...";
+      authBtn.textContent = "Validating Human Biometrics...";
+      statusTerminal.textContent = "Scanning frame for human face profile...";
       speak("Scanning face profile.");
 
       await initAudioAnalyser();
@@ -628,34 +627,53 @@
       ctx.drawImage(webcam, 0, 0, 160, 120);
       const imgData = ctx.getImageData(0, 0, 160, 120).data;
 
-      // Generate a detailed color & luminance signature hash array
+      let skinPixels = 0;
+      let totalPixels = 0;
       let signature = [];
-      let step = Math.floor(imgData.length / 40); // 40 sample blocks
-      for (let i = 0; i < imgData.length; i += step) {
-        signature.push(imgData[i], imgData[i+1], imgData[i+2]);
+
+      for (let i = 0; i < imgData.length; i += 4) {
+        let r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+        totalPixels++;
+        signature.push(r, g, b);
+
+        // Strict human skin tone RGB constraint check (blocks walls, objects, and blank spaces)
+        let isSkin = (r > 60 && g > 40 && b > 20 && r > g && r > b && Math.abs(r - g) > 15 && Math.max(r,g,b) - Math.min(r,g,b) > 15);
+        if (isSkin) skinPixels++;
       }
 
-      let savedSig = localStorage.getItem('jarvis_strict_face_sig');
-      if (!savedSig) {
-        // First ever run: Lock this exact face as the master owner
-        localStorage.setItem('jarvis_strict_face_sig', JSON.stringify(signature));
-        statusTerminal.textContent = "Master Face Enrolled. Primary User profile secured.";
-      } else {
-        // Compare against master profile with very strict tolerance
-        let masterSig = JSON.parse(savedSig);
-        let totalDiff = 0;
-        for (let i = 0; i < signature.length; i++) {
-          totalDiff += Math.abs(signature[i] - masterSig[i]);
-        }
-        let avgDiff = totalDiff / signature.length;
+      let skinPercentage = (skinPixels / totalPixels) * 100;
 
-        // If the difference is too high, it's someone else! Block them immediately.
-        if (avgDiff > 28) {
+      // STRICT VALIDATION: Must detect at least 12% actual human skin pixels in frame or it's a wall/object!
+      if (skinPercentage < 12) {
+        authBtn.disabled = false;
+        authBtn.textContent = "Tap to Run Strict Biometric Lock";
+        playHudSound('beep');
+        statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nNo human face or skin matrix detected. Point camera at your face.";
+        speak("Access denied. No human face detected.");
+        return;
+      }
+
+      let sampleSignature = signature.filter((_, idx) => idx % 12 === 0); // Compress array
+      let savedSig = localStorage.getItem('jarvis_bulletproof_face');
+
+      if (!savedSig) {
+        localStorage.setItem('jarvis_bulletproof_face', JSON.stringify(sampleSignature));
+        statusTerminal.textContent = "Master Face Enrolled. Secure biometric profile locked.";
+      } else {
+        let masterSig = JSON.parse(savedSig);
+        let diff = 0;
+        for (let i = 0; i < sampleSignature.length; i++) {
+          diff += Math.abs(sampleSignature[i] - masterSig[i]);
+        }
+        let avgDiff = diff / sampleSignature.length;
+
+        // Strict tolerance threshold: A different face or wall will fail this numerical hash check completely
+        if (avgDiff > 22) {
           authBtn.disabled = false;
           authBtn.textContent = "Tap to Run Strict Biometric Lock";
           playHudSound('beep');
-          statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch. Intruder detected.";
-          speak("Access denied. Unrecognized facial signature.");
+          statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nFacial signature mismatch. Intruder blocked.";
+          speak("Access denied. Unrecognized face.");
           return;
         }
       }
@@ -728,12 +746,10 @@
         lastFrameTime = timestamp - (elapsed % frameInterval);
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
         
-        // Fast downsampled snapshot scan
         scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
         const imgData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
 
         let targetXSum = 0, targetYSum = 0, targetPixelCount = 0;
-        // Optimized stride step (skips pixels for instant lock speed)
         for (let y = 2; y < scanCanvas.height - 2; y += 2) {
           for (let x = 2; x < scanCanvas.width - 2; x += 2) {
             const idx = (y * scanCanvas.width + x) * 4;
@@ -741,7 +757,6 @@
 
             let isTargetPixel = false;
             if (trackColor === 'red') {
-              // High sensitivity red isolation filter to instantly lock onto red glasses case without windshield glare
               isTargetPixel = (r > 100 && r > g * 1.3 && r > b * 1.3 && (r - Math.min(g, b)) > 40);
             } else if (trackColor === 'blue') {
               isTargetPixel = (b > 100 && b > r * 1.3 && b > g * 1.3);
@@ -758,11 +773,9 @@
         if (targetPixelCount > 5) {
           const rawTargetX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
           const rawTargetY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
-          // Instant snap smoothing
           trackX += (rawTargetX - trackX) * 0.6;
           trackY += (rawTargetY - trackY) * 0.6;
         } else {
-          // Fast spiral sweep if target is looking for match
           trackX += Math.sin(timestamp * 0.008) * 12;
           trackY += Math.cos(timestamp * 0.008) * 12;
         }

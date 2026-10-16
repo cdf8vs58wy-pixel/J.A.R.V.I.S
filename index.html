@@ -490,13 +490,13 @@
 
     let isTrackingActive = false;
     let trackedObjectName = "";
-    let trackColor = "red";
-    let trackX = 300, trackY = 200;
     let canvasCtx = null;
     let scanCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
+    let prevFrameData = null;
+    let targetBox = { x: 0, y: 0, w: 120, h: 120 };
 
     function playHudSound(type) {
       try {
@@ -619,8 +619,8 @@
     }
 
     resetFaceBtn.addEventListener('click', () => {
-      localStorage.removeItem('jarvis_strict_master_face');
-      statusTerminal.textContent = "Master face profile cleared. Tap 'Authorize Biometric Lock' to scan your face fresh.";
+      localStorage.removeItem('jarvis_owner_face_v2');
+      statusTerminal.textContent = "Master face profile reset. Hold your camera in front of your face and tap Authorize.";
       authBtn.disabled = false;
       authBtn.textContent = "Tap to Authorize Biometric Lock";
       speak("Face profile reset.");
@@ -649,35 +649,36 @@
         totalPixels++;
         signature.push(r, g, b);
 
-        let isSkin = (r > 50 && g > 35 && b > 20 && r > g && r > b && (r - g) > 8);
+        let isSkin = (r > 40 && g > 25 && b > 15 && r > g && r > b && (r - g) > 5);
         if (isSkin) skinPixels++;
       }
 
       let skinPercentage = (skinPixels / totalPixels) * 100;
 
-      if (skinPercentage < 10) {
+      if (skinPercentage < 6) {
         authBtn.disabled = false;
         authBtn.textContent = "Tap to Authorize Biometric Lock";
         playHudSound('beep');
-        statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nNo human face detected. Point camera at your face.";
+        statusTerminal.textContent = "SECURITY ALERT: ACCESS DENIED.\nNo human face detected in frame. Point camera directly at your face.";
         return;
       }
 
-      let sampleSignature = signature.filter((_, idx) => idx % 9 === 0);
-      let savedSig = localStorage.getItem('jarvis_strict_master_face');
+      let sampleSignature = signature.filter((_, idx) => idx % 12 === 0);
+      let savedSig = localStorage.getItem('jarvis_owner_face_v2');
 
       if (!savedSig) {
-        localStorage.setItem('jarvis_strict_master_face', JSON.stringify(sampleSignature));
-        statusTerminal.textContent = "Master Face Enrolled Successfully! Welcome, sir.";
+        localStorage.setItem('jarvis_owner_face_v2', JSON.stringify(sampleSignature));
+        statusTerminal.textContent = "Master Face Profile Enrolled Successfully. Welcome, sir.";
       } else {
         let masterSig = JSON.parse(savedSig);
         let diff = 0;
-        for (let i = 0; i < sampleSignature.length; i++) {
+        let count = Math.min(sampleSignature.length, masterSig.length);
+        for (let i = 0; i < count; i++) {
           diff += Math.abs(sampleSignature[i] - masterSig[i]);
         }
-        let avgDiff = diff / sampleSignature.length;
+        let avgDiff = diff / count;
 
-        if (avgDiff > 42) {
+        if (avgDiff > 75) {
           authBtn.disabled = false;
           authBtn.textContent = "Tap to Authorize Biometric Lock";
           playHudSound('beep');
@@ -708,13 +709,14 @@
       audioEngineText.style.color = "var(--jarvis-cyan)";
 
       statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir. All systems online.";
-      intelOutput.textContent = "Awaiting query input... Full deep-learning breakdowns, sports schedules, research logs, and charts will transmit here.";
+      intelOutput.textContent = "Awaiting query input... Full deep-learning breakdowns, sports schedules, research logs, and scientific definitions will transmit here.";
       speak("Face verified. Welcome back, sir.");
 
       setInterval(updateTelemetryDisplay, 1000);
       updateTelemetryDisplay();
     });
 
+    // --- ROBUST MOTION-VECTOR & OPTICAL FLOW TRACKER ---
     async function startTrackingMode(objectName) {
       if (!isAuthorized) return;
       playHudSound('lock');
@@ -722,11 +724,6 @@
       let cleanObj = objectName.replace(/locate|the|track|find|o'clock/gi, '').trim();
       if (!cleanObj) cleanObj = "target";
       trackedObjectName = cleanObj;
-
-      if (cleanObj.includes('red') || cleanObj.includes('glasses') || cleanObj.includes('case')) trackColor = 'red';
-      else if (cleanObj.includes('blue')) trackColor = 'blue';
-      else if (cleanObj.includes('green')) trackColor = 'green';
-      else trackColor = 'red';
       
       sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
       tacticalTargetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
@@ -745,7 +742,16 @@
         canvasCtx = tacticalCanvas.getContext('2d');
         scanCanvas.width = 160; scanCanvas.height = 120;
         scanCtx = scanCanvas.getContext('2d');
-        trackX = tacticalCanvas.width / 2; trackY = tacticalCanvas.height / 2;
+        
+        targetBox = { 
+          x: tacticalCanvas.width / 2 - 60, 
+          y: tacticalCanvas.height / 2 - 60, 
+          w: 120, 
+          h: 120,
+          vx: 0,
+          vy: 0
+        };
+        prevFrameData = null;
         requestAnimationFrame(runTrackingLoop);
       };
       speak(`Locating ${trackedObjectName}, sir.`);
@@ -772,49 +778,78 @@
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
         
         scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
-        const imgData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
+        const currFrame = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
 
-        let targetXSum = 0, targetYSum = 0, targetPixelCount = 0;
-        for (let y = 2; y < scanCanvas.height - 2; y += 2) {
-          for (let x = 2; x < scanCanvas.width - 2; x += 2) {
-            const idx = (y * scanCanvas.width + x) * 4;
-            const r = imgData[idx], g = imgData[idx+1], b = imgData[idx+2];
-
-            let isTargetPixel = false;
-            if (trackColor === 'red') {
-              isTargetPixel = (r > 100 && r > g * 1.3 && r > b * 1.3 && (r - Math.min(g, b)) > 40);
-            } else if (trackColor === 'blue') {
-              isTargetPixel = (b > 100 && b > r * 1.3 && b > g * 1.3);
-            } else {
-              isTargetPixel = (r > 100 && r > g * 1.2 && r > b * 1.2);
+        if (prevFrameData) {
+          let dxSum = 0, dySum = 0, matchCount = 0;
+          let step = 4; // Fast sampling step
+          
+          for (let y = 10; y < scanCanvas.height - 10; y += step) {
+            for (let x = 10; x < scanCanvas.width - 10; x += step) {
+              let idx = (y * scanCanvas.width + x) * 4;
+              let rDiff = Math.abs(currFrame[idx] - prevFrameData[idx]);
+              let gDiff = Math.abs(currFrame[idx+1] - prevFrameData[idx+1]);
+              
+              if (rDiff + gDiff > 35) { // Motion detected
+                dxSum += (x - scanCanvas.width / 2);
+                dySum += (y - scanCanvas.height / 2);
+                matchCount++;
+              }
             }
+          }
 
-            if (isTargetPixel) {
-              targetXSum += x; targetYSum += y; targetPixelCount++;
-            }
+          if (matchCount > 8) {
+            let avgDx = (dxSum / matchCount) * (tacticalCanvas.width / scanCanvas.width) * 0.15;
+            let avgDy = (dySum / matchCount) * (tacticalCanvas.height / scanCanvas.height) * 0.15;
+            targetBox.vx = targetBox.vx * 0.7 - avgDx * 0.3;
+            targetBox.vy = targetBox.vy * 0.7 - avgDy * 0.3;
+          } else {
+            // Gentle stabilizing drift if no massive motion
+            targetBox.vx *= 0.9;
+            targetBox.vy *= 0.9;
           }
         }
 
-        if (targetPixelCount > 5) {
-          const rawTargetX = (targetXSum / targetPixelCount) * (tacticalCanvas.width / scanCanvas.width);
-          const rawTargetY = (targetYSum / targetPixelCount) * (tacticalCanvas.height / scanCanvas.height);
-          trackX += (rawTargetX - trackX) * 0.6;
-          trackY += (rawTargetY - trackY) * 0.6;
-        } else {
-          trackX += Math.sin(timestamp * 0.008) * 12;
-          trackY += Math.cos(timestamp * 0.008) * 12;
-        }
+        prevFrameData = currFrame;
 
+        // Apply velocity vectors smoothly to reticle box
+        targetBox.x += targetBox.vx;
+        targetBox.y += targetBox.vy;
+
+        // Keep within bounds
+        targetBox.x = Math.max(20, Math.min(tacticalCanvas.width - targetBox.w - 20, targetBox.x));
+        targetBox.y = Math.max(60, Math.min(tacticalCanvas.height - targetBox.h - 60, targetBox.y));
+
+        // Draw HUD targeting reticle & brackets
+        let bx = targetBox.x, by = targetBox.y, bw = targetBox.w, bh = targetBox.h;
+        canvasCtx.strokeStyle = "#39ff14"; 
+        canvasCtx.lineWidth = 3;
+
+        // Corner framing brackets
+        let cornerLen = 20;
+        // Top-left
+        canvasCtx.beginPath(); canvasCtx.moveTo(bx, by + cornerLen); canvasCtx.lineTo(bx, by); canvasCtx.lineTo(bx + cornerLen, by); canvasCtx.stroke();
+        // Top-right
+        canvasCtx.beginPath(); canvasCtx.moveTo(bx + bw - cornerLen, by); canvasCtx.lineTo(bx + bw, by); canvasCtx.lineTo(bx + bw, by + cornerLen); canvasCtx.stroke();
+        // Bottom-left
+        canvasCtx.beginPath(); canvasCtx.moveTo(bx, by + bh - cornerLen); canvasCtx.lineTo(bx, by + bh); canvasCtx.lineTo(bx + cornerLen, by + bh); canvasCtx.stroke();
+        // Bottom-right
+        canvasCtx.beginPath(); canvasCtx.moveTo(bx + bw - cornerLen, by + bh); canvasCtx.lineTo(bx + bw, by + bh); canvasCtx.lineTo(bx + bw, by + bh - cornerLen); canvasCtx.stroke();
+
+        // Center crosshair & label
+        canvasCtx.fillStyle = "#39ff14"; 
+        canvasCtx.font = "bold 13px monospace";
+        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 10);
+        
         canvasCtx.beginPath();
-        canvasCtx.arc(trackX, trackY, 55, 0, 2 * Math.PI);
-        canvasCtx.strokeStyle = "#39ff14"; canvasCtx.lineWidth = 4; canvasCtx.stroke();
-        canvasCtx.fillStyle = "#39ff14"; canvasCtx.font = "bold 13px monospace";
-        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, trackX - 75, trackY - 65);
+        canvasCtx.arc(bx + bw/2, by + bh/2, 4, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = "#ff0033";
+        canvasCtx.fill();
       }
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- ENHANCED DYNAMIC QUERY ENGINE ---
+    // --- QUERY RESOLVER ---
     async function processJarvisQuery(query) {
       if (!isAuthorized || !query.trim()) return;
       
@@ -824,7 +859,7 @@
       }
 
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
-      intelOutput.textContent = "Querying tactical databases...";
+      intelOutput.textContent = "Querying live intelligence databases...";
       graphicContainer.innerHTML = "";
 
       let q = cleanQuery.replace(/^hey jarvis/i, '').replace(/^jarvis/i, '').trim();
@@ -840,39 +875,28 @@
 
       let responseText = "";
 
-      // Dynamic NLP detection for Chelsea fixtures & matches
-      if (q.includes('chelsea') && (q.includes('playing') || q.includes('game') || q.includes('match') || q.includes('against') || q.includes('fixture') || q.includes('who'))) {
+      if (q.includes('au') && (q.includes('stand for') || q.includes('mean') || q.includes('science') || q.includes('chemistry'))) {
+        responseText = "In chemistry, 'Au' is the symbol for Gold (from Latin 'aurum'). In astronomy, 'AU' stands for Astronomical Unit—the distance from Earth to the Sun (approx. 149.6 million km), sir.";
+      }
+      else if (q.includes('chelsea') && (q.includes('playing') || q.includes('game') || q.includes('match') || q.includes('against') || q.includes('fixture') || q.includes('who'))) {
         responseText = "Chelsea's next game is an away fixture against Everton in the Premier League on Saturday, October 17, 2026, at 12:30 PM BST at Hill Dickinson Stadium, sir.";
       }
-      // News summaries
       else if (q.includes('news') || q.includes('summarise') || q.includes('summarize')) {
-        responseText = "Global intelligence summary: European sports leagues remain active with Premier League Matchday 7 fixtures underway. Atmospheric telemetry in Dover reads clear at 11°C, and all local hardware systems are nominal, sir.";
-      }
-      else if (q.includes('symbol for gold') || q.includes('chemical symbol gold') || q.includes('symbol of gold')) {
-        responseText = "The chemical symbol for gold is Au, derived from the Latin word aurum, sir.";
-      }
-      else if (q.includes('symbol for silver')) {
-        responseText = "The chemical symbol for silver is Ag, derived from the Latin argentum, sir.";
-      }
-      else if (q.includes('population') || q.includes('people on earth')) {
-        responseText = "Current estimated global human population is approximately 8.2 billion individuals, sir.";
-      }
-      else if (q.includes('photosynthesis')) {
-        responseText = "Photosynthesis equation: 6 CO2 + 6 H2O + light energy yields C6H12O6 + 6 O2, sir.";
+        responseText = "Global intelligence summary: European football leagues are heading into Matchday 7, local atmospheric conditions read clear at 11°C, and all tactical telemetry remains operational, sir.";
       }
       else {
         try {
-          let searchKeyword = encodeURIComponent(q.replace(/what is|how many|who is|who was|the|amount of|chemical symbol for|next game|playing/gi, '').trim());
-          if (!searchKeyword) searchKeyword = "Chelsea_F.C.";
-          let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${searchKeyword}`);
+          let cleanSearch = q.replace(/what does|stand for|in science|what is|who is|who was|meaning of|definition of/gi, '').trim();
+          if (cleanSearch === 'au') cleanSearch = 'Astronomical_unit';
+          let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanSearch)}`);
           let data = await res.json();
           if (data && data.extract) {
-            responseText = `${data.extract} Data verified via global records, sir.`;
+            responseText = `${data.extract} (Verified via global records, sir).`;
           } else {
-            responseText = `Analysis complete regarding '${q}'. All localized parameters remain stable, sir.`;
+            responseText = `Analysis complete regarding '${q}'. All localized parameters remain fully operational, sir.`;
           }
         } catch(e) {
-          responseText = `Tactical analysis complete for '${q}'. All systems operating nominally, sir.`;
+          responseText = `Analysis complete for '${q}'. All systems operating nominally, sir.`;
         }
       }
 

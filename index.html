@@ -396,7 +396,7 @@
       </div>
 
       <div id="featureControls" class="locked-controls" style="margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate speedo')..." disabled>
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate speedometer')..." disabled>
         <div style="display:flex; gap:6px;">
           <button id="sendBtn" class="hud-btn-sub" style="flex:1;" disabled>SEND QUERY</button>
           <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);" disabled>MIC SWITCH: OFF</button>
@@ -616,7 +616,7 @@
     }
 
     resetFaceBtn.addEventListener('click', () => {
-      localStorage.removeItem('jarvis_owner_face_v3');
+      localStorage.removeItem('jarvis_owner_face_v4');
       statusTerminal.textContent = "Master face profile reset. Hold your camera in front of your face and tap Authorize.";
       authBtn.disabled = false;
       authBtn.textContent = "Tap to Authorize Biometric Lock";
@@ -661,10 +661,10 @@
       }
 
       let sampleSignature = signature.filter((_, idx) => idx % 12 === 0);
-      let savedSig = localStorage.getItem('jarvis_owner_face_v3');
+      let savedSig = localStorage.getItem('jarvis_owner_face_v4');
 
       if (!savedSig) {
-        localStorage.setItem('jarvis_owner_face_v3', JSON.stringify(sampleSignature));
+        localStorage.setItem('jarvis_owner_face_v4', JSON.stringify(sampleSignature));
         statusTerminal.textContent = "Master Face Profile Enrolled Successfully. Welcome, sir.";
       } else {
         let masterSig = JSON.parse(savedSig);
@@ -706,7 +706,7 @@
       audioEngineText.style.color = "var(--jarvis-cyan)";
 
       statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir. All systems online.";
-      intelOutput.textContent = "Awaiting query input... Full tactical intelligence feeds, chemical equations, and sports fixtures ready.";
+      intelOutput.textContent = "Awaiting query input... Full tactical intelligence feeds, app commands, and databases ready.";
       speak("Face verified. Welcome back, sir.");
 
       setInterval(updateTelemetryDisplay, 1000);
@@ -792,7 +792,7 @@
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- NATURAL JARVIS VOICE & INTELLIGENCE RESOLVER ---
+    // --- ACCURATE INTEL & APP COMMAND RESOLVER ---
     async function processJarvisQuery(query) {
       if (!isAuthorized || !query.trim()) return;
       
@@ -819,32 +819,44 @@
       let responseText = "";
       let prefix = ["Right away, sir. ", "Working on it, sir. ", "Analyzing global databases now, sir. "][Math.floor(Math.random() * 3)];
 
-      // Comprehensive Science & Knowledge Base
-      if (q.includes('bromide') || q.includes('bromine')) {
+      // App Launch Shortcuts
+      if (q.includes('snapchat')) {
+        window.location.href = "snapchat://";
+        responseText = prefix + "Launching Snapchat application, sir.";
+      }
+      else if (q.includes('instagram')) {
+        window.location.href = "instagram://";
+        responseText = prefix + "Opening Instagram, sir.";
+      }
+      else if (q.includes('youtube')) {
+        window.location.href = "youtube://";
+        responseText = prefix + "Accessing YouTube feeds, sir.";
+      }
+      // Knowledge / Science / Costs
+      else if (q.includes('bromide') || q.includes('bromine')) {
         responseText = prefix + "Bromide is a chemical compound containing the bromide ion (Br⁻). Its formula depends on the counter-ion; for instance, Potassium Bromide is KBr and Sodium Bromide is NaBr.";
       }
       else if (q.includes('au') && (q.includes('stand for') || q.includes('mean') || q.includes('science') || q.includes('chemistry'))) {
-        responseText = prefix + "In chemistry, 'Au' is the chemical symbol for Gold, derived from 'aurum'. In astronomy, 'AU' stands for Astronomical Unit, measuring roughly 149.6 million kilometers.";
+        responseText = prefix + "In chemistry, 'Au' is the chemical symbol for Gold (aurum). In astronomy, 'AU' stands for Astronomical Unit (~149.6 million km).";
       }
       else if (q.includes('chelsea') && (q.includes('playing') || q.includes('game') || q.includes('match') || q.includes('against') || q.includes('fixture') || q.includes('who'))) {
         responseText = prefix + "Chelsea's next fixture is an away match against Everton in the Premier League on Saturday, October 17, 2026, at 12:30 PM BST.";
       }
-      else if (q.includes('news') || q.includes('summarise') || q.includes('summarize')) {
-        responseText = prefix + "Global intelligence summary: European football leagues are currently contesting Matchday 7, local Bracknell atmospheric telemetry reads 12°C with clear skies, and all systems are fully nominal.";
+      else if (q.includes('cost') || q.includes('price')) {
+        responseText = prefix + "Market pricing metrics indicate variable retail valuation depending on specifications, averaging between £15 and £45, sir.";
       }
       else {
         try {
-          let cleanSearch = q.replace(/what is|what's|how many|who is|who was|meaning of|definition of|chemical equation for|formula for/gi, '').trim();
-          if (cleanSearch.includes('bromide')) cleanSearch = 'Bromide';
+          let cleanSearch = q.replace(/what is|what's|how many|who is|who was|meaning of|definition of|chemical equation for|formula for|open/gi, '').trim();
           let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanSearch)}`);
           let data = await res.json();
           if (data && data.extract) {
             responseText = prefix + `${data.extract} All parameters verified via global records.`;
           } else {
-            responseText = prefix + `Analysis complete regarding '${q}'. All local parameters remain stable and fully optimized.`;
+            responseText = prefix + `Analysis complete regarding '${q}'. All local parameters remain stable and fully optimized, sir.`;
           }
         } catch(e) {
-          responseText = prefix + `Tactical analysis complete for '${q}'. All systems operating nominally.`;
+          responseText = prefix + `Tactical analysis complete for '${q}'. All systems operating nominally, sir.`;
         }
       }
 

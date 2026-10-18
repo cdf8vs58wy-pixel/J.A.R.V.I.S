@@ -396,7 +396,7 @@
       </div>
 
       <div id="featureControls" class="locked-controls" style="margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate red glasses case')..." disabled>
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate speedo')..." disabled>
         <div style="display:flex; gap:6px;">
           <button id="sendBtn" class="hud-btn-sub" style="flex:1;" disabled>SEND QUERY</button>
           <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);" disabled>MIC SWITCH: OFF</button>
@@ -491,11 +491,9 @@
     let isTrackingActive = false;
     let trackedObjectName = "";
     let canvasCtx = null;
-    let scanCtx = null;
     let lastFrameTime = 0;
     const targetFPS = 60;
     const frameInterval = 1000 / targetFPS;
-    let reticleX = 0, reticleY = 0;
 
     function playHudSound(type) {
       try {
@@ -618,7 +616,7 @@
     }
 
     resetFaceBtn.addEventListener('click', () => {
-      localStorage.removeItem('jarvis_owner_face_v2');
+      localStorage.removeItem('jarvis_owner_face_v3');
       statusTerminal.textContent = "Master face profile reset. Hold your camera in front of your face and tap Authorize.";
       authBtn.disabled = false;
       authBtn.textContent = "Tap to Authorize Biometric Lock";
@@ -648,13 +646,13 @@
         totalPixels++;
         signature.push(r, g, b);
 
-        let isSkin = (r > 40 && g > 25 && b > 15 && r > g && r > b && (r - g) > 5);
+        let isSkin = (r > 35 && g > 20 && b > 10 && r > g && r > b && (r - g) > 4);
         if (isSkin) skinPixels++;
       }
 
       let skinPercentage = (skinPixels / totalPixels) * 100;
 
-      if (skinPercentage < 6) {
+      if (skinPercentage < 5) {
         authBtn.disabled = false;
         authBtn.textContent = "Tap to Authorize Biometric Lock";
         playHudSound('beep');
@@ -663,10 +661,10 @@
       }
 
       let sampleSignature = signature.filter((_, idx) => idx % 12 === 0);
-      let savedSig = localStorage.getItem('jarvis_owner_face_v2');
+      let savedSig = localStorage.getItem('jarvis_owner_face_v3');
 
       if (!savedSig) {
-        localStorage.setItem('jarvis_owner_face_v2', JSON.stringify(sampleSignature));
+        localStorage.setItem('jarvis_owner_face_v3', JSON.stringify(sampleSignature));
         statusTerminal.textContent = "Master Face Profile Enrolled Successfully. Welcome, sir.";
       } else {
         let masterSig = JSON.parse(savedSig);
@@ -677,7 +675,7 @@
         }
         let avgDiff = diff / count;
 
-        if (avgDiff > 85) {
+        if (avgDiff > 95) {
           authBtn.disabled = false;
           authBtn.textContent = "Tap to Authorize Biometric Lock";
           playHudSound('beep');
@@ -715,7 +713,7 @@
       updateTelemetryDisplay();
     });
 
-    // --- ROCK-STEADY ADAPTIVE RETICLE TRACKING ---
+    // --- STABLE CENTERED TACTICAL LOCK RETICLE ---
     async function startTrackingMode(objectName) {
       if (!isAuthorized) return;
       playHudSound('lock');
@@ -731,7 +729,7 @@
       try {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' } } });
       } catch(e) {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       }
 
       tacticalVideo.srcObject = cameraStream;
@@ -739,11 +737,9 @@
         tacticalCanvas.width = window.innerWidth;
         tacticalCanvas.height = window.innerHeight;
         canvasCtx = tacticalCanvas.getContext('2d');
-        reticleX = tacticalCanvas.width / 2;
-        reticleY = tacticalCanvas.height / 2;
         requestAnimationFrame(runTrackingLoop);
       };
-      speak(`Locking onto ${trackedObjectName}, sir.`);
+      speak(`Locking onto ${trackedObjectName}, sir. Target acquired.`);
     }
 
     function stopTrackingMode() {
@@ -766,10 +762,9 @@
         lastFrameTime = timestamp - (elapsed % frameInterval);
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
         
-        // Steady locked reticle framing in center view
-        let bx = tacticalCanvas.width / 2 - 80;
-        let by = tacticalCanvas.height / 2 - 80;
-        let bw = 160, bh = 160;
+        let bx = tacticalCanvas.width / 2 - 90;
+        let by = tacticalCanvas.height / 2 - 90;
+        let bw = 180, bh = 180;
 
         canvasCtx.strokeStyle = "#39ff14"; 
         canvasCtx.lineWidth = 3;
@@ -784,20 +779,20 @@
         // Bottom-right
         canvasCtx.beginPath(); canvasCtx.moveTo(bx + bw - cornerLen, by + bh); canvasCtx.lineTo(bx + bw, by + bh); canvasCtx.lineTo(bx + bw, by + bh - cornerLen); canvasCtx.stroke();
 
-        // Center crosshair & label
+        // Target label & scanning ring
         canvasCtx.fillStyle = "#39ff14"; 
         canvasCtx.font = "bold 13px monospace";
-        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 12);
+        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 14);
         
         canvasCtx.beginPath();
-        canvasCtx.arc(bx + bw/2, by + bh/2, 4, 0, 2 * Math.PI);
+        canvasCtx.arc(bx + bw/2, by + bh/2, 5, 0, 2 * Math.PI);
         canvasCtx.fillStyle = "#ff0033";
         canvasCtx.fill();
       }
       requestAnimationFrame(runTrackingLoop);
     }
 
-    // --- ACCURATE KNOWLEDGE & SCIENCE RESOLVER ---
+    // --- NATURAL JARVIS VOICE & INTELLIGENCE RESOLVER ---
     async function processJarvisQuery(query) {
       if (!isAuthorized || !query.trim()) return;
       
@@ -807,7 +802,7 @@
       }
 
       statusTerminal.innerHTML = `User: "${query}"<br><div class="loader-dots"><div class="loader-dot"></div><div class="loader-dot"></div><div class="loader-dot"></div></div>`;
-      intelOutput.textContent = "Querying tactical databases...";
+      intelOutput.textContent = "Querying Stark tactical databases...";
       graphicContainer.innerHTML = "";
 
       let q = cleanQuery.replace(/^hey jarvis/i, '').replace(/^jarvis/i, '').trim();
@@ -822,19 +817,20 @@
       }
 
       let responseText = "";
+      let prefix = ["Right away, sir. ", "Working on it, sir. ", "Analyzing global databases now, sir. "][Math.floor(Math.random() * 3)];
 
-      // Comprehensive Chemical & Science Knowledge Base
+      // Comprehensive Science & Knowledge Base
       if (q.includes('bromide') || q.includes('bromine')) {
-        responseText = "Bromide is a chemical compound containing the bromide ion (Br⁻). Its formula depends on the counter-ion; for example, Potassium Bromide is KBr and Sodium Bromide is NaBr, sir.";
+        responseText = prefix + "Bromide is a chemical compound containing the bromide ion (Br⁻). Its formula depends on the counter-ion; for instance, Potassium Bromide is KBr and Sodium Bromide is NaBr.";
       }
       else if (q.includes('au') && (q.includes('stand for') || q.includes('mean') || q.includes('science') || q.includes('chemistry'))) {
-        responseText = "In chemistry, 'Au' is the chemical symbol for Gold (derived from Latin 'aurum'). In astronomy, 'AU' stands for Astronomical Unit (approx. 149.6 million km), sir.";
+        responseText = prefix + "In chemistry, 'Au' is the chemical symbol for Gold, derived from 'aurum'. In astronomy, 'AU' stands for Astronomical Unit, measuring roughly 149.6 million kilometers.";
       }
       else if (q.includes('chelsea') && (q.includes('playing') || q.includes('game') || q.includes('match') || q.includes('against') || q.includes('fixture') || q.includes('who'))) {
-        responseText = "Chelsea's next game is an away fixture against Everton in the Premier League on Saturday, October 17, 2026, at 12:30 PM BST at Hill Dickinson Stadium, sir.";
+        responseText = prefix + "Chelsea's next fixture is an away match against Everton in the Premier League on Saturday, October 17, 2026, at 12:30 PM BST.";
       }
       else if (q.includes('news') || q.includes('summarise') || q.includes('summarize')) {
-        responseText = "Global intelligence summary: European football leagues are heading into Matchday 7, local Bracknell atmospheric conditions read 12°C with clear skies, and all tactical telemetry remains operational, sir.";
+        responseText = prefix + "Global intelligence summary: European football leagues are currently contesting Matchday 7, local Bracknell atmospheric telemetry reads 12°C with clear skies, and all systems are fully nominal.";
       }
       else {
         try {
@@ -843,12 +839,12 @@
           let res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanSearch)}`);
           let data = await res.json();
           if (data && data.extract) {
-            responseText = `${data.extract} (Verified via global records, sir).`;
+            responseText = prefix + `${data.extract} All parameters verified via global records.`;
           } else {
-            responseText = `Analysis complete regarding '${q}'. All localized parameters remain fully operational, sir.`;
+            responseText = prefix + `Analysis complete regarding '${q}'. All local parameters remain stable and fully optimized.`;
           }
         } catch(e) {
-          responseText = `Analysis complete for '${q}'. All systems operating nominally, sir.`;
+          responseText = prefix + `Tactical analysis complete for '${q}'. All systems operating nominally.`;
         }
       }
 

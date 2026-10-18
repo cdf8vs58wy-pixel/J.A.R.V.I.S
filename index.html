@@ -396,7 +396,7 @@
       </div>
 
       <div id="featureControls" class="locked-controls" style="margin-top:6px;">
-        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Jarvis locate speedometer')..." disabled>
+        <input type="text" id="tacticalInput" class="hud-input" placeholder="Type command (e.g., 'Track my room for 20 seconds')..." disabled>
         <div style="display:flex; gap:6px;">
           <button id="sendBtn" class="hud-btn-sub" style="flex:1;" disabled>SEND QUERY</button>
           <button id="voiceToggleBtn" class="hud-btn-sub" style="flex:1; border-color: var(--jarvis-neon); color: var(--jarvis-neon);" disabled>MIC SWITCH: OFF</button>
@@ -429,20 +429,20 @@
           <div>CORE BRAIN: <b id="coreBrainText" style="color:var(--jarvis-red);">LOCKED</b></div>
           <div>AUDIO ENGINE: <b id="audioEngineText" style="color:var(--jarvis-red);">LOCKED</b></div>
           <div>FPS MODE: <b style="color:var(--jarvis-neon);">60 FPS HARDWARE</b></div>
-          <div>LOCATION: <b id="locationText" style="color:var(--jarvis-cyan);">BRACKNELL, UK</b></div>
+          <div>LOCATION: <b id="locationText" style="color:var(--jarvis-cyan);">DOVER, UK</b></div>
         </div>
       </div>
     </div>
   </div>
 
   <div id="tacticalOverlay">
-    <button id="exitTacticalBtn">✖ EXIT TRACKING HUD</button>
+    <button id="exitTacticalBtn">✖ EXIT SURVEILLANCE HUD</button>
     <video id="tacticalVideo" autoplay playsinline muted></video>
     <canvas id="tacticalCanvas"></canvas>
     <div class="jarvis-tactical-bar">
-      <span id="sysModeStatus">SYS: 60 FPS ACTIVE</span>
-      <span id="tacticalTargetStatus">TARGET: OBJECT</span>
-      <span>ZOOM: <span id="tacticalZoom">0.5X</span></span>
+      <span id="sysModeStatus">SYS: ROOM SECURITY ACTIVE</span>
+      <span id="tacticalTargetStatus">STATUS: MONITORING INTRUDERS</span>
+      <span>TIME: <span id="surveillanceTimer">20s</span></span>
     </div>
   </div>
 
@@ -475,24 +475,29 @@
     const tacticalCanvas = document.getElementById('tacticalCanvas');
     const tacticalTargetStatus = document.getElementById('tacticalTargetStatus');
     const sysModeStatus = document.getElementById('sysModeStatus');
+    const surveillanceTimer = document.getElementById('surveillanceTimer');
 
     let isAuthorized = false;
     let cameraStream = null;
     let recognition = null;
     let isMicContinuous = false; 
-    let userLat = 51.4168; 
-    let userLon = -0.7479;
+    let userLat = 51.1279; 
+    let userLon = 1.3134;
 
     let audioCtx = null;
     let analyser = null;
     let microphone = null;
     let isWhispering = false;
 
-    let isTrackingActive = false;
-    let trackedObjectName = "";
+    let isSurveillanceActive = false;
+    let surveillanceDuration = 20;
+    let surveillanceInterval = null;
     let canvasCtx = null;
+    let scanCtx = null;
+    let prevFrameBuffer = null;
+    let motionDetectedCount = 0;
     let lastFrameTime = 0;
-    const targetFPS = 60;
+    const targetFPS = 30;
     const frameInterval = 1000 / targetFPS;
 
     function playHudSound(type) {
@@ -525,6 +530,13 @@
           gain.gain.setValueAtTime(0.1, now);
           gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
           osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'alert') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(800, now);
+          osc.frequency.setValueAtTime(1200, now + 0.1);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+          osc.start(now); osc.stop(now + 0.3);
         }
       } catch(e) {}
     }
@@ -535,7 +547,7 @@
           (pos) => { 
             userLat = pos.coords.latitude; 
             userLon = pos.coords.longitude; 
-            locationText.textContent = "Bracknell, UK";
+            locationText.textContent = "Dover, UK";
           },
           (err) => {},
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -616,7 +628,7 @@
     }
 
     resetFaceBtn.addEventListener('click', () => {
-      localStorage.removeItem('jarvis_owner_face_v4');
+      localStorage.removeItem('jarvis_owner_face_v5');
       statusTerminal.textContent = "Master face profile reset. Hold your camera in front of your face and tap Authorize.";
       authBtn.disabled = false;
       authBtn.textContent = "Tap to Authorize Biometric Lock";
@@ -661,10 +673,10 @@
       }
 
       let sampleSignature = signature.filter((_, idx) => idx % 12 === 0);
-      let savedSig = localStorage.getItem('jarvis_owner_face_v4');
+      let savedSig = localStorage.getItem('jarvis_owner_face_v5');
 
       if (!savedSig) {
-        localStorage.setItem('jarvis_owner_face_v4', JSON.stringify(sampleSignature));
+        localStorage.setItem('jarvis_owner_face_v5', JSON.stringify(sampleSignature));
         statusTerminal.textContent = "Master Face Profile Enrolled Successfully. Welcome, sir.";
       } else {
         let masterSig = JSON.parse(savedSig);
@@ -706,24 +718,24 @@
       audioEngineText.style.color = "var(--jarvis-cyan)";
 
       statusTerminal.textContent = "Biometric Security Check: SUCCESS\nWelcome back, sir. All systems online.";
-      intelOutput.textContent = "Awaiting query input... Full tactical intelligence feeds, app commands, and databases ready.";
+      intelOutput.textContent = "Awaiting command... Room surveillance, security monitoring, and tactical queries ready.";
       speak("Face verified. Welcome back, sir.");
 
       setInterval(updateTelemetryDisplay, 1000);
       updateTelemetryDisplay();
     });
 
-    // --- STABLE CENTERED TACTICAL LOCK RETICLE ---
-    async function startTrackingMode(objectName) {
+    // --- ROOM SECURITY SURVEILLANCE & MOTION DETECTION ---
+    async function startSurveillanceMode(durationSec) {
       if (!isAuthorized) return;
       playHudSound('lock');
-      isTrackingActive = true;
-      let cleanObj = objectName.replace(/locate|the|track|find|o'clock/gi, '').trim();
-      if (!cleanObj) cleanObj = "target";
-      trackedObjectName = cleanObj;
-      
-      sysModeStatus.textContent = "SYS: 60 FPS ACTIVE";
-      tacticalTargetStatus.textContent = `TARGET: ${trackedObjectName.toUpperCase()}`;
+      isSurveillanceActive = true;
+      surveillanceDuration = durationSec || 20;
+      motionDetectedCount = 0;
+      prevFrameBuffer = null;
+
+      sysModeStatus.textContent = "SYS: ROOM SECURITY ACTIVE";
+      tacticalTargetStatus.textContent = "STATUS: MONITORING INTRUDERS";
       tacticalOverlay.style.display = 'flex';
 
       try {
@@ -737,62 +749,87 @@
         tacticalCanvas.width = window.innerWidth;
         tacticalCanvas.height = window.innerHeight;
         canvasCtx = tacticalCanvas.getContext('2d');
-        requestAnimationFrame(runTrackingLoop);
+        scanCanvas.width = 160; scanCanvas.height = 120;
+        scanCtx = scanCanvas.getContext('2d');
+        
+        surveillanceTimer.textContent = `${surveillanceDuration}s`;
+        if (surveillanceInterval) clearInterval(surveillanceInterval);
+
+        surveillanceInterval = setInterval(() => {
+          surveillanceDuration--;
+          surveillanceTimer.textContent = `${surveillanceDuration}s`;
+          if (surveillanceDuration <= 0) {
+            clearInterval(surveillanceInterval);
+            stopSurveillanceMode(true);
+          }
+        }, 1000);
+
+        requestAnimationFrame(runSurveillanceLoop);
       };
-      speak(`Locking onto ${trackedObjectName}, sir. Target acquired.`);
+      speak(`Room security engaged for ${surveillanceDuration} seconds, sir. Monitoring for motion.`);
     }
 
-    function stopTrackingMode() {
-      isTrackingActive = false;
+    function stopSurveillanceMode(completed = false) {
+      isSurveillanceActive = false;
+      if (surveillanceInterval) clearInterval(surveillanceInterval);
       tacticalOverlay.style.display = 'none';
       if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); }
       playHudSound('beep');
-      speak("Tracking disengaged, sir.");
-      statusTerminal.textContent = "Tracking disengaged. Returning to normal HUD mode.";
+
+      let reportMsg = completed 
+        ? `Surveillance complete. Motion events detected: ${motionDetectedCount}. Room status: ${motionDetectedCount > 3 ? 'INTRUSION / MOVEMENT NOTED' : 'SECURE'}` 
+        : "Surveillance disengaged, sir.";
+      
+      statusTerminal.textContent = reportMsg;
+      intelOutput.textContent = reportMsg;
+      speak(reportMsg);
     }
 
-    exitTacticalBtn.addEventListener('click', stopTrackingMode);
+    exitTacticalBtn.addEventListener('click', () => stopSurveillanceMode(false));
 
-    function runTrackingLoop(timestamp) {
-      if (!isTrackingActive || !canvasCtx) return;
+    function runSurveillanceLoop(timestamp) {
+      if (!isSurveillanceActive || !canvasCtx || !scanCtx) return;
       if (!lastFrameTime) lastFrameTime = timestamp;
       const elapsed = timestamp - lastFrameTime;
 
       if (elapsed >= frameInterval) {
         lastFrameTime = timestamp - (elapsed % frameInterval);
         canvasCtx.clearRect(0, 0, tacticalCanvas.width, tacticalCanvas.height);
-        
-        let bx = tacticalCanvas.width / 2 - 90;
-        let by = tacticalCanvas.height / 2 - 90;
-        let bw = 180, bh = 180;
 
-        canvasCtx.strokeStyle = "#39ff14"; 
-        canvasCtx.lineWidth = 3;
+        // Draw live scanning grid overlay
+        canvasCtx.strokeStyle = motionDetectedCount > 3 ? "rgba(255, 0, 51, 0.7)" : "rgba(57, 255, 20, 0.4)";
+        canvasCtx.lineWidth = 2;
+        canvasCtx.strokeRect(40, 40, tacticalCanvas.width - 80, tacticalCanvas.height - 80);
 
-        let cornerLen = 25;
-        // Top-left
-        canvasCtx.beginPath(); canvasCtx.moveTo(bx, by + cornerLen); canvasCtx.lineTo(bx, by); canvasCtx.lineTo(bx + cornerLen, by); canvasCtx.stroke();
-        // Top-right
-        canvasCtx.beginPath(); canvasCtx.moveTo(bx + bw - cornerLen, by); canvasCtx.lineTo(bx + bw, by); canvasCtx.lineTo(bx + bw, by + cornerLen); canvasCtx.stroke();
-        // Bottom-left
-        canvasCtx.beginPath(); canvasCtx.moveTo(bx, by + bh - cornerLen); canvasCtx.lineTo(bx, by + bh); canvasCtx.lineTo(bx + cornerLen, by + bh); canvasCtx.stroke();
-        // Bottom-right
-        canvasCtx.beginPath(); canvasCtx.moveTo(bx + bw - cornerLen, by + bh); canvasCtx.lineTo(bx + bw, by + bh); canvasCtx.lineTo(bx + bw, by + bh - cornerLen); canvasCtx.stroke();
+        canvasCtx.fillStyle = motionDetectedCount > 3 ? "#ff0033" : "#39ff14";
+        canvasCtx.font = "bold 14px monospace";
+        canvasCtx.fillText(motionDetectedCount > 3 ? "[ALERT: MOTION DETECTED]" : "[SECURE: ROOM MONITORING]", 50, 70);
 
-        // Target label & scanning ring
-        canvasCtx.fillStyle = "#39ff14"; 
-        canvasCtx.font = "bold 13px monospace";
-        canvasCtx.fillText(`[LOCKED: ${trackedObjectName.toUpperCase()}]`, bx, by - 14);
-        
-        canvasCtx.beginPath();
-        canvasCtx.arc(bx + bw/2, by + bh/2, 5, 0, 2 * Math.PI);
-        canvasCtx.fillStyle = "#ff0033";
-        canvasCtx.fill();
+        scanCtx.drawImage(tacticalVideo, 0, 0, scanCanvas.width, scanCanvas.height);
+        const currFrame = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height).data;
+
+        if (prevFrameBuffer) {
+          let diffPixels = 0;
+          for (let i = 0; i < currFrame.length; i += 16) {
+            let rDiff = Math.abs(currFrame[i] - prevFrameBuffer[i]);
+            let gDiff = Math.abs(currFrame[i+1] - prevFrameBuffer[i+1]);
+            if (rDiff + gDiff > 40) {
+              diffPixels++;
+            }
+          }
+
+          if (diffPixels > 120) {
+            motionDetectedCount++;
+            playHudSound('alert');
+            tacticalTargetStatus.textContent = `ALERT: MOTION EVENT #${motionDetectedCount}`;
+          }
+        }
+        prevFrameBuffer = currFrame;
       }
-      requestAnimationFrame(runTrackingLoop);
+      requestAnimationFrame(runSurveillanceLoop);
     }
 
-    // --- ACCURATE INTEL & APP COMMAND RESOLVER ---
+    // --- STRICT COMMAND RESOLVER ---
     async function processJarvisQuery(query) {
       if (!isAuthorized || !query.trim()) return;
       
@@ -807,12 +844,15 @@
 
       let q = cleanQuery.replace(/^hey jarvis/i, '').replace(/^jarvis/i, '').trim();
 
-      if (q.includes('locate') || q.includes('track') || q.includes('find')) {
-        startTrackingMode(q);
+      // ROOM SECURITY & MONITORING COMMANDS
+      if (q.includes('track my room') || q.includes('monitor room') || q.includes('room security') || q.includes('watch room')) {
+        let matchSec = q.match(/(\d+)\s*(sec|second)/);
+        let secs = matchSec ? parseInt(matchSec[1]) : 20;
+        startSurveillanceMode(secs);
         return;
       }
-      if (q.includes('disengage') || q.includes('stop tracking') || q.includes('exit')) {
-        stopTrackingMode();
+      if (q.includes('stop surveillance') || q.includes('stop monitoring') || q.includes('exit room security')) {
+        stopSurveillanceMode(false);
         return;
       }
 
@@ -832,7 +872,7 @@
         window.location.href = "youtube://";
         responseText = prefix + "Accessing YouTube feeds, sir.";
       }
-      // Knowledge / Science / Costs
+      // Knowledge / Science
       else if (q.includes('bromide') || q.includes('bromine')) {
         responseText = prefix + "Bromide is a chemical compound containing the bromide ion (Br⁻). Its formula depends on the counter-ion; for instance, Potassium Bromide is KBr and Sodium Bromide is NaBr.";
       }
